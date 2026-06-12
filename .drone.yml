@@ -84,7 +84,6 @@ steps:
       PROJECT_SLUG: MD Editor
       ARTIFACT_DIR: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
       ARTIFACT_UPLOAD_ALL: "true"
-      VERSION: "v0.1.2"
       DRONE_UPLOAD_TOKEN:
         from_secret: download_site_upload_token
 
