@@ -29,6 +29,11 @@ fn file_exists(path: &str) -> bool {
 }
 
 #[command]
+fn is_regular_file(path: &str) -> bool {
+  file_assoc::is_openable_file(std::path::Path::new(path))
+}
+
+#[command]
 fn list_md_files(dir: &str) -> Result<Vec<String>, String> {
   let mut files = Vec::new();
   let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
@@ -68,7 +73,7 @@ fn allow_launch_file_scopes(app: &AppHandle, files: &[PathBuf]) {
 fn normalize_opened_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
   paths
     .into_iter()
-    .filter(|path| path.exists() && file_assoc::is_markdown_file(path))
+    .filter(|path| file_assoc::is_openable_file(path))
     .collect()
 }
 
@@ -121,6 +126,7 @@ pub fn run() {
       read_file,
       write_file,
       file_exists,
+      is_regular_file,
       list_md_files,
       take_launch_files,
       register_md_default_handler,

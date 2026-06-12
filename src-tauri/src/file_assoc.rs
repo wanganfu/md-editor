@@ -51,6 +51,11 @@ pub fn is_markdown_file(path: &Path) -> bool {
   })
 }
 
+/// Launch / drag-open: accept any regular file; extension is ignored when reading as text.
+pub fn is_openable_file(path: &Path) -> bool {
+  path.is_file()
+}
+
 #[cfg(windows)]
 pub fn register_md_file_association() -> Result<(), String> {
   use winreg::enums::*;

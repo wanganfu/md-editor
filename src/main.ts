@@ -628,13 +628,32 @@ async function openFileByPath(path: string) {
   }
 }
 
-const MD_EXTENSIONS = new Set(["md", "markdown", "txt"]);
+async function pickFirstOpenablePath(paths: string[]): Promise<string | null> {
+  for (const path of paths) {
+    try {
+      if (await invoke<boolean>("is_regular_file", { path })) {
+        return path;
+      }
+    } catch {
+      // ignore invalid paths
+    }
+  }
+  return null;
+}
 
-function isMarkdownPath(path: string): boolean {
-  const name = path.split(/[/\\]/).pop() || path;
-  const dot = name.lastIndexOf(".");
-  if (dot <= 0) return false;
-  return MD_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+async function openPathsFromSystem(paths: string[]): Promise<boolean> {
+  const filePath = await pickFirstOpenablePath(paths);
+  if (!filePath) return false;
+
+  const opened = await openFileByPath(filePath);
+  if (!opened) return false;
+
+  const parent = filePath.replace(/[/\\][^/\\]+$/, "");
+  if (parent) {
+    currentFolderPath = parent;
+    await refreshFileList();
+  }
+  return true;
 }
 
 function isPointInDropZone(x: number, y: number): boolean {
@@ -1054,15 +1073,15 @@ async function initDragDrop() {
       const pos = payload.position.toLogical(factor);
       if (!isPointInDropZone(pos.x, pos.y)) return;
 
-      const mdFiles = payload.paths.filter(isMarkdownPath);
-      if (mdFiles.length === 0) {
-        showToast("请拖入 .md / .markdown / .txt 文件");
+      const filePath = await pickFirstOpenablePath(payload.paths);
+      if (!filePath) {
+        showToast("请拖入可打开的文件");
         return;
       }
 
-      const opened = await openFileByPath(mdFiles[0]);
+      const opened = await openFileByPath(filePath);
       if (opened) {
-        const name = mdFiles[0].split(/[/\\]/).pop() || mdFiles[0];
+        const name = filePath.split(/[/\\]/).pop() || filePath;
         showToast(`已打开 ${name}`);
       }
     } finally {
@@ -1219,21 +1238,6 @@ function initSettings() {
 }
 
 // ── Default app (Windows) ─────────────────────────────
-async function openPathsFromSystem(paths: string[]): Promise<boolean> {
-  const mdFiles = paths.filter(isMarkdownPath);
-  if (mdFiles.length === 0) return false;
-
-  const opened = await openFileByPath(mdFiles[0]);
-  if (!opened) return false;
-
-  const parent = mdFiles[0].replace(/[/\\][^/\\]+$/, "");
-  if (parent) {
-    currentFolderPath = parent;
-    await refreshFileList();
-  }
-  return true;
-}
-
 async function initOpenFileListener() {
   await listen<string[]>("open-files", async (event) => {
     await openPathsFromSystem(event.payload);
