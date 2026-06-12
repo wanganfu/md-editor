@@ -9,67 +9,78 @@
   </head>
 
   <body class="h-screen flex flex-col">
-    <!-- Unified Toolbar -->
-    <nav id="toolbar" class="flex items-center px-2 py-1 border-b select-none shrink-0" style="background:var(--bg-toolbar);border-color:var(--border-primary)" data-tauri-drag-region>
-      <!-- Left: sidebar toggle, folder open, logo -->
-      <div class="flex items-center gap-0.5 pr-2">
-        <button id="btn-sidebar-toggle" class="toolbar-btn" title="侧边栏"><i class="fa-solid fa-bars"></i></button>
-        <button id="btn-open-folder" class="toolbar-btn" title="打开文件夹"><i class="fa-solid fa-folder-plus"></i></button>
-        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-        <span class="flex items-center gap-1.5 px-1 select-none" id="logo-area">
-          <i class="fa-brands fa-markdown text-lg" style="color:var(--accent)"></i>
-          <span id="file-name" class="text-xs font-medium truncate max-w-[160px]" style="color:var(--text-body)">未命名</span>
-          <span id="modified-dot" class="w-2 h-2 rounded-full hidden shrink-0" style="background:#f59e0b"></span>
-        </span>
-      </div>
+    <div id="toolbar-wrap" class="shrink-0 flex flex-col">
+      <!-- Main Toolbar -->
+      <nav id="toolbar" class="toolbar-row flex items-center px-2 py-1 border-b select-none shrink-0" style="background:var(--bg-toolbar);border-color:var(--border-primary)" data-tauri-drag-region>
+        <!-- Left: sidebar toggle, folder open, settings, logo -->
+        <div id="toolbar-left" class="toolbar-section flex items-center gap-0.5 pr-2 shrink-0">
+          <button id="btn-sidebar-toggle" class="toolbar-btn" title="侧边栏"><i class="fa-solid fa-bars"></i></button>
+          <button id="btn-open-folder" class="toolbar-btn" title="打开文件夹"><i class="fa-solid fa-folder-plus"></i></button>
+          <button id="btn-settings" class="toolbar-btn" title="设置"><i class="fa-solid fa-gear"></i></button>
+          <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+          <span class="flex items-center gap-1.5 px-1 select-none" id="logo-area">
+            <i class="fa-brands fa-markdown text-lg" style="color:var(--accent)"></i>
+            <span id="file-name" class="text-xs font-medium truncate max-w-[160px]" style="color:var(--text-body)">未命名</span>
+            <span id="modified-dot" class="w-2 h-2 rounded-full hidden shrink-0" style="background:#f59e0b"></span>
+          </span>
+        </div>
 
-      <!-- Center: formatting buttons -->
-      <div class="flex-1 flex items-center justify-center gap-0.5 overflow-x-auto">
-        <button class="toolbar-btn font-bold" data-action="bold" title="粗体 (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
-        <button class="toolbar-btn italic" data-action="italic" title="斜体 (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
-        <button class="toolbar-btn" data-action="strikethrough" title="删除线"><i class="fa-solid fa-strikethrough"></i></button>
-        <span class="w-px h-4 mx-0.5" style="background:var(--border-secondary)"></span>
-        <button class="toolbar-btn" data-action="heading1" title="标题 1"><i class="fa-solid fa-heading"></i><span class="text-[10px]">1</span></button>
-        <button class="toolbar-btn" data-action="heading2" title="标题 2"><i class="fa-solid fa-heading"></i><span class="text-[10px]">2</span></button>
-        <button class="toolbar-btn" data-action="heading3" title="标题 3"><i class="fa-solid fa-heading"></i><span class="text-[10px]">3</span></button>
-        <span class="w-px h-4 mx-0.5" style="background:var(--border-secondary)"></span>
-        <button class="toolbar-btn" data-action="ul" title="无序列表"><i class="fa-solid fa-list-ul"></i></button>
-        <button class="toolbar-btn" data-action="ol" title="有序列表"><i class="fa-solid fa-list-ol"></i></button>
-        <button class="toolbar-btn" data-action="task" title="任务列表"><i class="fa-solid fa-square-check"></i></button>
-        <span class="w-px h-4 mx-0.5" style="background:var(--border-secondary)"></span>
-        <button class="toolbar-btn" data-action="quote" title="引用"><i class="fa-solid fa-quote-right"></i></button>
-        <button class="toolbar-btn" data-action="code" title="行内代码"><i class="fa-solid fa-code"></i></button>
-        <button class="toolbar-btn" data-action="codeblock" title="代码块"><i class="fa-solid fa-file-code"></i></button>
-        <button class="toolbar-btn" data-action="link" title="链接"><i class="fa-solid fa-link"></i></button>
-        <button class="toolbar-btn" data-action="image" title="图片"><i class="fa-solid fa-image"></i></button>
-        <span class="w-px h-4 mx-0.5" style="background:var(--border-secondary)"></span>
-        <button class="toolbar-btn" data-action="hr" title="分割线"><i class="fa-solid fa-minus"></i></button>
-        <button class="toolbar-btn" data-action="table" title="表格"><i class="fa-solid fa-table"></i></button>
-      </div>
+        <!-- Center slot: formatting buttons (moved to secondary toolbar when narrow) -->
+        <div id="toolbar-format-slot" class="toolbar-format-slot flex-1 flex items-center justify-center min-w-0 overflow-hidden">
+          <div id="format-toolbar-group" class="format-toolbar-group flex items-center gap-0.5 shrink-0">
+            <button class="toolbar-btn font-bold" data-action="bold" title="粗体 (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
+            <button class="toolbar-btn italic" data-action="italic" title="斜体 (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
+            <button class="toolbar-btn" data-action="strikethrough" title="删除线"><i class="fa-solid fa-strikethrough"></i></button>
+            <span class="w-px h-4 mx-0.5 toolbar-sep-inline" style="background:var(--border-secondary)"></span>
+            <button class="toolbar-btn" data-action="heading1" title="标题 1"><i class="fa-solid fa-heading"></i><span class="text-[10px]">1</span></button>
+            <button class="toolbar-btn" data-action="heading2" title="标题 2"><i class="fa-solid fa-heading"></i><span class="text-[10px]">2</span></button>
+            <button class="toolbar-btn" data-action="heading3" title="标题 3"><i class="fa-solid fa-heading"></i><span class="text-[10px]">3</span></button>
+            <span class="w-px h-4 mx-0.5 toolbar-sep-inline" style="background:var(--border-secondary)"></span>
+            <button class="toolbar-btn" data-action="ul" title="无序列表"><i class="fa-solid fa-list-ul"></i></button>
+            <button class="toolbar-btn" data-action="ol" title="有序列表"><i class="fa-solid fa-list-ol"></i></button>
+            <button class="toolbar-btn" data-action="task" title="任务列表"><i class="fa-solid fa-square-check"></i></button>
+            <span class="w-px h-4 mx-0.5 toolbar-sep-inline" style="background:var(--border-secondary)"></span>
+            <button class="toolbar-btn" data-action="quote" title="引用"><i class="fa-solid fa-quote-right"></i></button>
+            <button class="toolbar-btn" data-action="code" title="行内代码"><i class="fa-solid fa-code"></i></button>
+            <button class="toolbar-btn" data-action="codeblock" title="代码块"><i class="fa-solid fa-file-code"></i></button>
+            <button class="toolbar-btn" data-action="link" title="链接"><i class="fa-solid fa-link"></i></button>
+            <button class="toolbar-btn" data-action="image" title="图片"><i class="fa-solid fa-image"></i></button>
+            <span class="w-px h-4 mx-0.5 toolbar-sep-inline" style="background:var(--border-secondary)"></span>
+            <button class="toolbar-btn" data-action="hr" title="分割线"><i class="fa-solid fa-minus"></i></button>
+            <button class="toolbar-btn" data-action="table" title="表格"><i class="fa-solid fa-table"></i></button>
+          </div>
+        </div>
 
-      <!-- Right: file ops, view mode, theme, window controls -->
-      <div class="flex items-center gap-0.5 pl-2">
-        <button id="btn-new" class="toolbar-btn" title="新建 (Ctrl+N)"><i class="fa-solid fa-square-plus"></i></button>
-        <button id="btn-open" class="toolbar-btn" title="打开 (Ctrl+O)"><i class="fa-solid fa-folder-open"></i></button>
-        <button id="btn-save" class="toolbar-btn" title="保存 (Ctrl+S)"><i class="fa-solid fa-floppy-disk"></i></button>
-        <button id="btn-save-as" class="toolbar-btn" title="另存为"><i class="fa-solid fa-download"></i></button>
-        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-        <button id="btn-view-edit" class="toolbar-btn" title="仅编辑"><i class="fa-solid fa-pen-to-square"></i></button>
-        <button id="btn-view-split" class="toolbar-btn" title="分屏"><i class="fa-solid fa-columns"></i></button>
-        <button id="btn-view-preview" class="toolbar-btn" title="仅预览"><i class="fa-solid fa-eye"></i></button>
-        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-        <button id="btn-theme" class="toolbar-btn" title="切换主题"><i class="fa-solid fa-moon"></i></button>
-        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-        <button id="btn-minimize" class="win-btn" title="最小化"><i class="fa-solid fa-window-minimize"></i></button>
-        <button id="btn-maximize" class="win-btn" title="最大化"><i class="fa-solid fa-window-maximize"></i></button>
-        <button id="btn-close" class="win-btn win-btn-close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-    </nav>
+        <!-- Right: file ops, view mode, theme, window controls -->
+        <div id="toolbar-right" class="toolbar-section flex items-center gap-0.5 pl-2 shrink-0">
+          <button id="btn-new" class="toolbar-btn" title="新建 (Ctrl+N)"><i class="fa-solid fa-square-plus"></i></button>
+          <button id="btn-open" class="toolbar-btn" title="打开 (Ctrl+O)"><i class="fa-solid fa-folder-open"></i></button>
+          <button id="btn-save" class="toolbar-btn" title="保存 (Ctrl+S)"><i class="fa-solid fa-floppy-disk"></i></button>
+          <button id="btn-save-as" class="toolbar-btn" title="另存为"><i class="fa-solid fa-download"></i></button>
+          <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+          <button id="btn-view-edit" class="toolbar-btn" title="仅编辑"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button id="btn-view-split" class="toolbar-btn" title="分屏"><i class="fa-solid fa-columns"></i></button>
+          <button id="btn-scroll-lock" class="toolbar-btn" title="锁定同步滚动（分屏）"><i class="fa-solid fa-lock-open"></i></button>
+          <button id="btn-view-preview" class="toolbar-btn" title="仅预览"><i class="fa-solid fa-eye"></i></button>
+          <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+          <button id="btn-theme" class="toolbar-btn" title="切换主题"><i class="fa-solid fa-moon"></i></button>
+          <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+          <button id="btn-minimize" class="win-btn" title="最小化"><i class="fa-solid fa-window-minimize"></i></button>
+          <button id="btn-maximize" class="win-btn" title="最大化"><i class="fa-solid fa-window-maximize"></i></button>
+          <button id="btn-close" class="win-btn win-btn-close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </nav>
+
+      <!-- Secondary Toolbar: formatting buttons when main row is too narrow -->
+      <nav id="toolbar-secondary" class="toolbar-row toolbar-secondary hidden flex items-center px-2 py-1 border-b select-none shrink-0" style="background:var(--bg-toolbar);border-color:var(--border-primary)" data-tauri-drag-region>
+        <div id="toolbar-format-secondary-slot" class="flex items-center gap-0.5 overflow-x-auto"></div>
+      </nav>
+    </div>
 
     <!-- Main Content Area -->
     <div class="flex-1 flex overflow-hidden">
       <!-- Sidebar -->
-      <aside id="sidebar" class="flex flex-col shrink-0 border-r overflow-hidden transition-all duration-200" style="width:240px;background:var(--bg-sidebar);border-color:var(--border-primary)">
+      <aside id="sidebar" class="flex flex-col shrink-0 border-r overflow-hidden transition-all duration-200" style="width:0;min-width:0;background:var(--bg-sidebar);border-color:var(--border-primary)">
         <div class="flex items-center justify-between px-3 py-1.5 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
           <span class="text-xs font-medium" style="color:var(--text-secondary)">文件浏览器</span>
           <button id="btn-refresh-folder" class="toolbar-btn text-xs" title="刷新"><i class="fa-solid fa-rotate"></i></button>
@@ -93,7 +104,7 @@
           </div>
           <textarea
             id="editor"
-            class="flex-1 w-full p-4 resize-none outline-none font-mono text-sm leading-relaxed"
+            class="flex-1 w-full p-4 resize-none outline-none font-mono text-sm leading-relaxed overflow-y-auto"
             style="background:var(--bg-editor);color:var(--text-editor)"
             placeholder="开始编写 Markdown..."
             spellcheck="false"
@@ -128,5 +139,24 @@
     </footer>
 
     <input type="file" id="file-input" accept=".md,.markdown,.txt" class="hidden" />
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="settings-modal hidden">
+      <div id="settings-backdrop" class="settings-backdrop"></div>
+      <div class="settings-dialog" role="dialog" aria-labelledby="settings-title">
+        <div class="settings-header">
+          <h2 id="settings-title" class="settings-title">设置</h2>
+          <button id="settings-close" class="toolbar-btn" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="settings-body">
+          <section class="settings-section">
+            <h3 class="settings-section-title">文件关联</h3>
+            <p class="settings-desc">将 MD Editor 设为 Windows 上 <code>.md</code> / <code>.markdown</code> 文件的默认打开方式。双击文件即可直接打开。</p>
+            <p id="settings-default-status" class="settings-status">检测中...</p>
+            <button id="settings-btn-default-app" class="settings-action-btn">设为默认打开方式</button>
+          </section>
+        </div>
+      </div>
+    </div>
   </body>
 </html>

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
@@ -9,7 +9,9 @@ let currentFolderPath: string | null = null;
 let isModified = false;
 type ViewMode = "edit" | "split" | "preview";
 let isDark = false;
-let sidebarVisible = true;
+let sidebarVisible = false;
+let currentViewMode: ViewMode = "split";
+let scrollSyncLocked = false;
 
 // ── DOM refs ──────────────────────────────────────────
 const $ = <T extends HTMLElement>(sel: string) =>
@@ -30,6 +32,82 @@ $("#btn-close")?.addEventListener("click", () => appWindow.close());
 
 // ── Marked config ──────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
+
+const REMOTE_URL_RE =
+  /^(https?:|data:|mailto:|javascript:|#|asset:|blob:|https:\/\/asset\.)/i;
+
+function isRemoteResourceUrl(url: string): boolean {
+  return REMOTE_URL_RE.test(url);
+}
+
+function joinPaths(baseDir: string, relative: string): string {
+  const normalizedBase = baseDir.replace(/\\/g, "/");
+  const isWin = /^[a-zA-Z]:\//.test(normalizedBase);
+  const isUnixAbsolute = normalizedBase.startsWith("/");
+  const parts = baseDir.split(/[/\\]/).filter(Boolean);
+
+  for (const segment of relative.replace(/\\/g, "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      parts.pop();
+      continue;
+    }
+    parts.push(segment);
+  }
+
+  if (isWin && parts[0]?.endsWith(":")) {
+    return parts.join("\\");
+  }
+  if (isUnixAbsolute) {
+    return "/" + parts.join("/");
+  }
+  return parts.join(isWin ? "\\" : "/");
+}
+
+function resolveResourceUrl(href: string): string {
+  if (!href || isRemoteResourceUrl(href)) return href;
+  if (!currentFilePath) return href;
+
+  try {
+    const decoded = decodeURIComponent(href.trim());
+    const isAbsolute =
+      /^[a-zA-Z]:[/\\]/.test(decoded) ||
+      (decoded.startsWith("/") && !decoded.startsWith("//"));
+
+    const absolute = isAbsolute
+      ? decoded
+      : joinPaths(
+          currentFilePath.replace(/[/\\][^/\\]+$/, ""),
+          decoded
+        );
+
+    return convertFileSrc(absolute);
+  } catch {
+    return href;
+  }
+}
+
+function rewriteLocalResourceUrls(html: string): string {
+  return html
+    .replace(
+      /(<img\b[^>]*?\ssrc=)(["'])([^"']+)\2/gi,
+      (_match, prefix, quote, src) =>
+        `${prefix}${quote}${resolveResourceUrl(src)}${quote}`
+    )
+    .replace(
+      /(<(?:video|audio|source)\b[^>]*?\ssrc=)(["'])([^"']+)\2/gi,
+      (_match, prefix, quote, src) =>
+        `${prefix}${quote}${resolveResourceUrl(src)}${quote}`
+    );
+}
+
+marked.use({
+  hooks: {
+    postprocess(html) {
+      return rewriteLocalResourceUrls(html);
+    },
+  },
+});
 
 // ── Preview update (debounced) ─────────────────────────
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,8 +159,7 @@ function markSaved() {
 }
 
 // ── Sidebar ────────────────────────────────────────────
-function toggleSidebar() {
-  sidebarVisible = !sidebarVisible;
+function applySidebarState() {
   const sidebar = $("#sidebar");
   const btn = $("#btn-sidebar-toggle");
   if (sidebarVisible) {
@@ -94,6 +171,74 @@ function toggleSidebar() {
     sidebar.style.minWidth = "0px";
     btn.classList.remove("active");
   }
+}
+
+function toggleSidebar() {
+  sidebarVisible = !sidebarVisible;
+  applySidebarState();
+}
+
+// ── Responsive toolbar ─────────────────────────────────
+const TOOLBAR_LAYOUT_HYSTERESIS = 16;
+let toolbarCompact = false;
+
+function getMainToolbarAvailableWidth(): number {
+  const toolbar = $("#toolbar");
+  const left = $("#toolbar-left");
+  const right = $("#toolbar-right");
+  return toolbar.clientWidth - left.offsetWidth - right.offsetWidth;
+}
+
+function setToolbarCompact(compact: boolean) {
+  if (toolbarCompact === compact) return;
+  toolbarCompact = compact;
+
+  const formatGroup = $("#format-toolbar-group");
+  const mainSlot = $("#toolbar-format-slot");
+  const secondarySlot = $("#toolbar-format-secondary-slot");
+  const secondaryToolbar = $("#toolbar-secondary");
+  const toolbar = $("#toolbar");
+
+  if (compact) {
+    secondarySlot.appendChild(formatGroup);
+    secondaryToolbar.classList.remove("hidden");
+    mainSlot.classList.add("is-hidden");
+    toolbar.classList.add("toolbar-compact");
+  } else {
+    mainSlot.appendChild(formatGroup);
+    secondaryToolbar.classList.add("hidden");
+    mainSlot.classList.remove("is-hidden");
+    toolbar.classList.remove("toolbar-compact");
+  }
+}
+
+function updateToolbarLayout() {
+  const formatGroup = $("#format-toolbar-group");
+  const formatWidth = formatGroup.scrollWidth;
+  const available = getMainToolbarAvailableWidth();
+
+  if (toolbarCompact) {
+    if (formatWidth <= available - TOOLBAR_LAYOUT_HYSTERESIS) {
+      setToolbarCompact(false);
+    }
+  } else if (formatWidth > available) {
+    setToolbarCompact(true);
+  }
+}
+
+function initToolbarLayout() {
+  const wrap = $("#toolbar-wrap");
+  const observer = new ResizeObserver(() => updateToolbarLayout());
+  observer.observe(wrap);
+  observer.observe($("#toolbar-left"));
+  observer.observe($("#toolbar-right"));
+  observer.observe($("#format-toolbar-group"));
+
+  appWindow.onResized(() => updateToolbarLayout());
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(updateToolbarLayout);
+  });
 }
 
 async function openFolder() {
@@ -162,9 +307,38 @@ async function openFileByPath(path: string) {
     markSaved();
     updatePreview();
     refreshFileList(); // Update active state
+    return true;
   } catch (e) {
     alert(`打开文件失败: ${e}`);
+    return false;
   }
+}
+
+const MD_EXTENSIONS = new Set(["md", "markdown", "txt"]);
+
+function isMarkdownPath(path: string): boolean {
+  const name = path.split(/[/\\]/).pop() || path;
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return MD_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
+
+function isPointInDropZone(x: number, y: number): boolean {
+  for (const sel of ["#editor-pane", "#preview-pane"]) {
+    const rect = $(sel).getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function setDropZoneHighlight(active: boolean) {
+  $("#editor-area").classList.toggle("drop-target-active", active);
+}
+
+function clearDropZoneHighlight() {
+  $("#editor-area").classList.remove("drop-target-active");
 }
 
 // ── File Operations ────────────────────────────────────
@@ -251,6 +425,7 @@ async function saveFileAs() {
 
 // ── View Mode ──────────────────────────────────────────
 function setViewMode(mode: ViewMode) {
+  currentViewMode = mode;
   const editorPane = document.querySelector("#editor-pane") as HTMLElement;
   const previewPane = document.querySelector("#preview-pane") as HTMLElement;
   const splitter = document.querySelector("#splitter") as HTMLElement;
@@ -300,6 +475,8 @@ function setViewMode(mode: ViewMode) {
       btnPreview.classList.add("active");
       break;
   }
+
+  updateScrollLockButton();
 }
 
 // ── Theme Toggle ───────────────────────────────────────
@@ -446,6 +623,7 @@ $("#btn-open-folder")?.addEventListener("click", openFolder);
 // View toggle
 $("#btn-view-edit")?.addEventListener("click", () => setViewMode("edit"));
 $("#btn-view-split")?.addEventListener("click", () => setViewMode("split"));
+$("#btn-scroll-lock")?.addEventListener("click", toggleScrollSyncLock);
 $("#btn-view-preview")?.addEventListener("click", () => setViewMode("preview"));
 
 // Theme
@@ -507,15 +685,222 @@ function initSplitter() {
   });
 }
 
+// ── External file drag & drop ───────────────────────────
+let externalDragActive = false;
+
+async function initDragDrop() {
+  await appWindow.onDragDropEvent(async (event) => {
+    const payload = event.payload;
+
+    if (payload.type === "enter") {
+      externalDragActive = true;
+      return;
+    }
+
+    if (payload.type === "leave") {
+      externalDragActive = false;
+      clearDropZoneHighlight();
+      return;
+    }
+
+    if (payload.type === "over") {
+      if (!externalDragActive) {
+        clearDropZoneHighlight();
+        return;
+      }
+      const factor = await appWindow.scaleFactor();
+      const pos = payload.position.toLogical(factor);
+      setDropZoneHighlight(isPointInDropZone(pos.x, pos.y));
+      return;
+    }
+
+    if (payload.type !== "drop") return;
+
+    externalDragActive = false;
+    clearDropZoneHighlight();
+
+    try {
+      const factor = await appWindow.scaleFactor();
+      const pos = payload.position.toLogical(factor);
+      if (!isPointInDropZone(pos.x, pos.y)) return;
+
+      const mdFiles = payload.paths.filter(isMarkdownPath);
+      if (mdFiles.length === 0) {
+        showToast("请拖入 .md / .markdown / .txt 文件");
+        return;
+      }
+
+      const opened = await openFileByPath(mdFiles[0]);
+      if (opened) {
+        const name = mdFiles[0].split(/[/\\]/).pop() || mdFiles[0];
+        showToast(`已打开 ${name}`);
+      }
+    } finally {
+      externalDragActive = false;
+      clearDropZoneHighlight();
+    }
+  });
+}
+
+// ── Sync scroll (split mode, when locked) ──────────────
+let scrollSyncApplying = false;
+
+function getScrollRatio(el: HTMLElement): number {
+  const maxScroll = el.scrollHeight - el.clientHeight;
+  if (maxScroll <= 0) return 0;
+  return el.scrollTop / maxScroll;
+}
+
+function setScrollByRatio(el: HTMLElement, ratio: number) {
+  const maxScroll = el.scrollHeight - el.clientHeight;
+  el.scrollTop = Math.max(0, ratio * maxScroll);
+}
+
+function shouldSyncScroll(): boolean {
+  return scrollSyncLocked && currentViewMode === "split";
+}
+
+function updateScrollLockButton() {
+  const btn = $("#btn-scroll-lock");
+  const icon = btn.querySelector("i");
+  if (!icon) return;
+
+  if (scrollSyncLocked) {
+    btn.classList.add("active");
+    btn.title = "取消同步滚动";
+    icon.className = "fa-solid fa-lock";
+  } else {
+    btn.classList.remove("active");
+    btn.title = "锁定同步滚动（分屏）";
+    icon.className = "fa-solid fa-lock-open";
+  }
+
+  btn.classList.toggle("opacity-40", currentViewMode !== "split");
+}
+
+function toggleScrollSyncLock() {
+  scrollSyncLocked = !scrollSyncLocked;
+  updateScrollLockButton();
+  showToast(scrollSyncLocked ? "已锁定同步滚动" : "已取消同步滚动");
+}
+
+function initSyncScroll() {
+  editor.addEventListener("scroll", () => {
+    if (scrollSyncApplying || !shouldSyncScroll()) return;
+    scrollSyncApplying = true;
+    setScrollByRatio(preview, getScrollRatio(editor));
+    scrollSyncApplying = false;
+  });
+
+  preview.addEventListener("scroll", () => {
+    if (scrollSyncApplying || !shouldSyncScroll()) return;
+    scrollSyncApplying = true;
+    setScrollByRatio(editor, getScrollRatio(preview));
+    scrollSyncApplying = false;
+  });
+
+  updateScrollLockButton();
+}
+
+// ── Settings modal ─────────────────────────────────────
+async function updateSettingsDefaultStatus() {
+  const status = $("#settings-default-status");
+  const btn = $<HTMLButtonElement>("#settings-btn-default-app");
+  if (!status || !btn) return;
+  btn.disabled = false;
+  try {
+    const isDefault = await invoke<boolean>("is_md_default_handler");
+    if (isDefault) {
+      status.textContent = "当前已是 Markdown 默认打开方式";
+      btn.textContent = "重新注册默认打开方式";
+      btn.classList.add("active");
+    } else {
+      status.textContent = "尚未设为 Markdown 默认打开方式";
+      btn.textContent = "设为默认打开方式";
+      btn.classList.remove("active");
+    }
+  } catch {
+    status.textContent = "此功能仅支持 Windows";
+    btn.disabled = true;
+  }
+}
+
+function openSettings() {
+  const modal = $("#settings-modal");
+  modal.classList.remove("hidden");
+  modal.classList.add("open");
+  updateSettingsDefaultStatus();
+}
+
+function closeSettings() {
+  const modal = $("#settings-modal");
+  modal.classList.remove("open");
+  modal.classList.add("hidden");
+}
+
+async function registerDefaultAppFromSettings() {
+  try {
+    await invoke("register_md_default_handler");
+    showToast("已设为 Markdown 默认打开方式");
+    await updateSettingsDefaultStatus();
+  } catch (e) {
+    alert(`设置失败: ${e}`);
+  }
+}
+
+function initSettings() {
+  $("#btn-settings")?.addEventListener("click", openSettings);
+  $("#settings-close")?.addEventListener("click", closeSettings);
+  $("#settings-backdrop")?.addEventListener("click", closeSettings);
+  $("#settings-btn-default-app")?.addEventListener(
+    "click",
+    registerDefaultAppFromSettings
+  );
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#settings-modal").classList.contains("open")) {
+      closeSettings();
+    }
+  });
+}
+
+// ── Default app (Windows) ─────────────────────────────
+async function openLaunchFiles(): Promise<boolean> {
+  try {
+    const paths: string[] = await invoke("take_launch_files");
+    if (paths.length === 0) return false;
+
+    const opened = await openFileByPath(paths[0]);
+    if (!opened) return false;
+
+    const parent = paths[0].replace(/[/\\][^/\\]+$/, "");
+    if (parent) {
+      currentFolderPath = parent;
+      await refreshFileList();
+    }
+    return true;
+  } catch (e) {
+    console.error("打开启动文件失败:", e);
+    return false;
+  }
+}
+
 // ── Initialize ─────────────────────────────────────────
 let initialized = false;
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   if (initialized) return;
   initialized = true;
 
   initSplitter();
+  initDragDrop();
+  initSyncScroll();
+  initSettings();
+  initToolbarLayout();
+  applySidebarState();
 
-  editor.value = `# 欢迎使用 MD Editor
+  const openedFromLaunch = await openLaunchFiles();
+  if (!openedFromLaunch) {
+    editor.value = `# 欢迎使用 MD Editor
 
 这是一个轻量化的 **Markdown 编辑器**，基于 Tauri + Tailwind CSS 构建。
 
@@ -551,7 +936,9 @@ function hello() {
 | 新建 | Ctrl+N |
 `;
 
-  updatePreview();
+    updatePreview();
+  }
+
   updateStatus();
   setViewMode("split");
 });

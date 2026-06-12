@@ -105,14 +105,52 @@
 }
 
 /* ── Toolbar (draggable region) ──────────────────────── */
+#toolbar-wrap {
+  flex-shrink: 0;
+}
+
+.toolbar-row {
+  background: var(--bg-toolbar);
+  border-color: var(--border-primary);
+  -webkit-app-region: drag;
+}
+
 #toolbar {
   background: var(--bg-toolbar);
   border-color: var(--border-primary);
   -webkit-app-region: drag;
 }
+
+#toolbar-format-slot.is-hidden {
+  display: none !important;
+}
+
+#toolbar.toolbar-compact #toolbar-right {
+  margin-left: auto;
+}
+
+#toolbar-secondary {
+  -webkit-app-region: drag;
+}
+
+#toolbar-secondary:not(.hidden) {
+  display: flex;
+}
+
+#toolbar-format-secondary-slot {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.format-toolbar-group {
+  -webkit-app-region: no-drag;
+}
+
 .toolbar-btn,
 .win-btn,
-#logo-area {
+#logo-area,
+.settings-dialog {
   -webkit-app-region: no-drag;
 }
 
@@ -194,6 +232,14 @@
 #splitter:hover { background: var(--accent) !important; }
 #splitter:active { background: var(--accent) !important; }
 
+/* ── Drag & drop ─────────────────────────────────────── */
+#editor-area.drop-target-active #editor-pane,
+#editor-area.drop-target-active #preview-pane {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-bg);
+}
+
 /* ── Markdown Preview ────────────────────────────────── */
 .md-preview { color: var(--text-preview); line-height: 1.75; }
 .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-primary); color: var(--text-preview-heading); }
@@ -221,3 +267,124 @@
 
 /* ── Icon sizing ─────────────────────────────────────── */
 .toolbar-btn i, .win-btn i { font-size: 0.8125rem; width: 0.875rem; text-align: center; }
+
+/* ── Settings modal ──────────────────────────────────── */
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.settings-modal.open {
+  pointer-events: auto;
+  opacity: 1;
+}
+.settings-modal.hidden { display: none; }
+.settings-modal.open.hidden { display: flex; }
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.settings-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(420px, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-body);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.18);
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-pane-header);
+}
+
+.settings-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-body);
+}
+
+.settings-body {
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.settings-section + .settings-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-primary);
+}
+
+.settings-section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-body);
+  margin-bottom: 0.5rem;
+}
+
+.settings-desc {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.settings-desc code {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--text-preview-code-bg);
+  color: var(--text-preview-code);
+}
+
+.settings-status {
+  font-size: 0.8125rem;
+  color: var(--text-body);
+  margin-bottom: 0.75rem;
+}
+
+.settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-toolbar);
+  color: var(--text-body);
+  cursor: pointer;
+  transition: all 150ms;
+}
+.settings-action-btn:hover:not(:disabled) {
+  background: var(--btn-hover);
+  border-color: var(--accent);
+}
+.settings-action-btn.active {
+  background: var(--btn-active-bg);
+  color: var(--btn-active-text);
+  border-color: var(--accent);
+}
+.settings-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
