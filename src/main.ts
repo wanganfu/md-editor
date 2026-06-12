@@ -1,38 +1,42 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 
 // ── State ──────────────────────────────────────────────
 let currentFilePath: string | null = null;
+let currentFolderPath: string | null = null;
 let isModified = false;
 type ViewMode = "edit" | "split" | "preview";
 let isDark = false;
+let sidebarVisible = true;
 
 // ── DOM refs ──────────────────────────────────────────
-const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const $ = <T extends HTMLElement>(sel: string) =>
+  document.querySelector(sel) as T;
 const editor = $<HTMLTextAreaElement>("#editor");
 const preview = $<HTMLDivElement>("#preview");
-const fileName = $<HTMLSpanElement>("#file-name");
-const modifiedDot = $<HTMLSpanElement>("#modified-dot");
 const statusWords = $<HTMLSpanElement>("#status-words");
 const statusChars = $<HTMLSpanElement>("#status-chars");
 const statusLines = $<HTMLSpanElement>("#status-lines");
 const statusCursor = $<HTMLSpanElement>("#status-cursor");
 const statusFilePath = $<HTMLSpanElement>("#status-file-path");
 
+// ── Window controls ─────────────────────────────────────
+const appWindow = getCurrentWindow();
+$("#btn-minimize")?.addEventListener("click", () => appWindow.minimize());
+$("#btn-maximize")?.addEventListener("click", () => appWindow.toggleMaximize());
+$("#btn-close")?.addEventListener("click", () => appWindow.close());
+
 // ── Marked config ──────────────────────────────────────
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-});
+marked.setOptions({ breaks: true, gfm: true });
 
 // ── Preview update (debounced) ─────────────────────────
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
 function updatePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
-    const md = editor.value;
-    preview.innerHTML = marked.parse(md) as string;
+    preview.innerHTML = marked.parse(editor.value) as string;
     updateStatus();
   }, 100);
 }
@@ -55,28 +59,112 @@ function updateStatus() {
   statusCursor.textContent = `行 ${line}, 列 ${col}`;
 }
 
-// ── Modified state ─────────────────────────────────────
+// ── Title update ───────────────────────────────────────
+function updateTitle() {
+  const base = currentFilePath
+    ? currentFilePath.split(/[/\\]/).pop() || "未命名"
+    : "未命名";
+  document.title = (isModified ? "* " : "") + base + " - MD Editor";
+  statusFilePath.textContent = currentFilePath || "";
+}
+
 function markModified() {
   if (!isModified) {
     isModified = true;
-    modifiedDot.classList.remove("hidden");
     updateTitle();
   }
 }
 
 function markSaved() {
   isModified = false;
-  modifiedDot.classList.add("hidden");
   updateTitle();
 }
 
-function updateTitle() {
-  const base = currentFilePath
-    ? currentFilePath.split(/[/\\]/).pop() || "未命名"
-    : "未命名";
-  fileName.textContent = base + (isModified ? " *" : "");
-  document.title = (isModified ? "* " : "") + base + " - MD Editor";
-  statusFilePath.textContent = currentFilePath || "";
+// ── Sidebar ────────────────────────────────────────────
+function toggleSidebar() {
+  sidebarVisible = !sidebarVisible;
+  const sidebar = $("#sidebar");
+  const btn = $("#btn-sidebar-toggle");
+  if (sidebarVisible) {
+    sidebar.style.width = "240px";
+    sidebar.style.minWidth = "240px";
+    btn.classList.add("active");
+  } else {
+    sidebar.style.width = "0px";
+    sidebar.style.minWidth = "0px";
+    btn.classList.remove("active");
+  }
+}
+
+async function openFolder() {
+  try {
+    const folderPath = await open({
+      directory: true,
+      multiple: false,
+      title: "选择文件夹",
+    });
+    if (folderPath && typeof folderPath === "string") {
+      currentFolderPath = folderPath;
+      await refreshFileList();
+    }
+  } catch (e) {
+    console.error("打开文件夹失败:", e);
+  }
+}
+
+async function refreshFileList() {
+  if (!currentFolderPath) return;
+  try {
+    const files: string[] = await invoke("list_md_files", {
+      dir: currentFolderPath,
+    });
+    const list = $("#sidebar-file-list");
+    const folderLabel = $("#sidebar-folder-path");
+    folderLabel.textContent =
+      currentFolderPath.split(/[/\\]/).pop() || currentFolderPath;
+
+    if (files.length === 0) {
+      list.innerHTML =
+        '<div class="px-3 py-4 text-xs" style="color:var(--text-secondary)">没有找到 Markdown 文件</div>';
+      return;
+    }
+
+    list.innerHTML = files
+      .map((f) => {
+        const name = f.split(/[/\\]/).pop() || f;
+        const isActive = f === currentFilePath;
+        return `<div class="sidebar-file ${isActive ? "active" : ""}" data-path="${f.replace(/"/g, "&quot;")}" title="${f.replace(/"/g, "&quot;")}">
+          <i class="fa-solid fa-file-lines shrink-0"></i><span class="truncate">${name}</span>
+        </div>`;
+      })
+      .join("");
+
+    // Click handler
+    list.querySelectorAll(".sidebar-file").forEach((item) => {
+      item.addEventListener("click", async () => {
+        const path = (item as HTMLElement).dataset.path!;
+        await openFileByPath(path);
+      });
+    });
+  } catch (e) {
+    console.error("列出文件失败:", e);
+  }
+}
+
+async function openFileByPath(path: string) {
+  if (isModified) {
+    if (!confirm("当前文件未保存，是否丢弃更改？")) return;
+  }
+  try {
+    const content = await invoke<string>("read_file", { path });
+    editor.value = content;
+    currentFilePath = path;
+    markSaved();
+    updatePreview();
+    refreshFileList(); // Update active state
+  } catch (e) {
+    alert(`打开文件失败: ${e}`);
+  }
 }
 
 // ── File Operations ────────────────────────────────────
@@ -88,6 +176,7 @@ async function newFile() {
   currentFilePath = null;
   markSaved();
   updatePreview();
+  if (currentFolderPath) refreshFileList();
 }
 
 async function openFile() {
@@ -100,22 +189,37 @@ async function openFile() {
       multiple: false,
     });
     if (path && typeof path === "string") {
-      const content = await invoke<string>("read_file", { path });
-      editor.value = content;
-      currentFilePath = path;
-      markSaved();
-      updatePreview();
+      await openFileByPath(path);
     }
   } catch (e) {
     alert(`打开文件失败: ${e}`);
   }
 }
 
+// ── Toast ──────────────────────────────────────────────
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
+function showToast(msg: string) {
+  const toast = $("#toast");
+  if (toastTimer) clearTimeout(toastTimer);
+  toast.textContent = msg;
+  toast.classList.remove("opacity-0", "translate-y-[-1rem]");
+  toast.classList.add("opacity-100", "translate-y-0");
+  toastTimer = setTimeout(() => {
+    toast.classList.add("opacity-0", "translate-y-[-1rem]");
+    toast.classList.remove("opacity-100", "translate-y-0");
+  }, 1800);
+}
+
 async function saveFile() {
   if (currentFilePath) {
     try {
-      await invoke("write_file", { path: currentFilePath, content: editor.value });
+      await invoke("write_file", {
+        path: currentFilePath,
+        content: editor.value,
+      });
       markSaved();
+      showToast("已保存");
+      if (currentFolderPath) refreshFileList();
     } catch (e) {
       alert(`保存失败: ${e}`);
     }
@@ -137,6 +241,8 @@ async function saveFileAs() {
       await invoke("write_file", { path, content: editor.value });
       currentFilePath = path;
       markSaved();
+      showToast("已另存为");
+      if (currentFolderPath) refreshFileList();
     }
   } catch (e) {
     alert(`另存失败: ${e}`);
@@ -145,21 +251,31 @@ async function saveFileAs() {
 
 // ── View Mode ──────────────────────────────────────────
 function setViewMode(mode: ViewMode) {
-  const editorPane = document.querySelector("#editor-pane")!;
-  const previewPane = document.querySelector("#preview-pane")!;
+  const editorPane = document.querySelector("#editor-pane") as HTMLElement;
+  const previewPane = document.querySelector("#preview-pane") as HTMLElement;
+  const splitter = document.querySelector("#splitter") as HTMLElement;
   const btnEdit = $("#btn-view-edit");
   const btnSplit = $("#btn-view-split");
   const btnPreview = $("#btn-view-preview");
 
-  // Reset all buttons
-  [btnEdit, btnSplit, btnPreview].forEach((b) => b.classList.remove("active"));
+  [btnEdit, btnSplit, btnPreview].forEach((b) =>
+    b.classList.remove("active")
+  );
+
+  // 拖动分割线会写入内联 flex，单栏模式需清除否则可见面板无法占满宽度
+  const clearPaneFlex = () => {
+    editorPane.style.flex = "";
+    previewPane.style.flex = "";
+  };
 
   switch (mode) {
     case "edit":
+      clearPaneFlex();
       editorPane.classList.remove("hidden");
       editorPane.classList.add("flex");
       previewPane.classList.add("hidden");
       previewPane.classList.remove("flex");
+      splitter.style.display = "none";
       btnEdit.classList.add("active");
       break;
     case "split":
@@ -167,13 +283,20 @@ function setViewMode(mode: ViewMode) {
       editorPane.classList.add("flex");
       previewPane.classList.remove("hidden");
       previewPane.classList.add("flex");
+      splitter.style.display = "";
+      if (!editorPane.style.flex) {
+        editorPane.style.flex = "1 1 50%";
+        previewPane.style.flex = "1 1 50%";
+      }
       btnSplit.classList.add("active");
       break;
     case "preview":
+      clearPaneFlex();
       editorPane.classList.add("hidden");
       editorPane.classList.remove("flex");
       previewPane.classList.remove("hidden");
       previewPane.classList.add("flex");
+      splitter.style.display = "none";
       btnPreview.classList.add("active");
       break;
   }
@@ -183,8 +306,7 @@ function setViewMode(mode: ViewMode) {
 function toggleTheme() {
   isDark = !isDark;
   const html = document.documentElement;
-  const btn = $("#btn-theme");
-  const icon = btn.querySelector("i")!;
+  const icon = $("#btn-theme").querySelector("i")!;
   if (isDark) {
     html.classList.add("dark");
     icon.className = "fa-solid fa-sun";
@@ -207,20 +329,42 @@ const actions: Record<string, ToolAction> = {
   bold: { prefix: "**", suffix: "**", defaultText: "粗体文本" },
   italic: { prefix: "*", suffix: "*", defaultText: "斜体文本" },
   strikethrough: { prefix: "~~", suffix: "~~", defaultText: "删除文本" },
-  heading1: { prefix: "# ", suffix: "", defaultText: "标题 1", block: true },
-  heading2: { prefix: "## ", suffix: "", defaultText: "标题 2", block: true },
-  heading3: { prefix: "### ", suffix: "", defaultText: "标题 3", block: true },
+  heading1: {
+    prefix: "# ",
+    suffix: "",
+    defaultText: "标题 1",
+    block: true,
+  },
+  heading2: {
+    prefix: "## ",
+    suffix: "",
+    defaultText: "标题 2",
+    block: true,
+  },
+  heading3: {
+    prefix: "### ",
+    suffix: "",
+    defaultText: "标题 3",
+    block: true,
+  },
   ul: { prefix: "- ", suffix: "", defaultText: "列表项", block: true },
   ol: { prefix: "1. ", suffix: "", defaultText: "列表项", block: true },
   task: { prefix: "- [ ] ", suffix: "", defaultText: "任务", block: true },
   quote: { prefix: "> ", suffix: "", defaultText: "引用", block: true },
   code: { prefix: "`", suffix: "`", defaultText: "code" },
-  codeblock: { prefix: "```\n", suffix: "\n```", defaultText: "代码", multiline: true },
+  codeblock: {
+    prefix: "```\n",
+    suffix: "\n```",
+    defaultText: "代码",
+    multiline: true,
+  },
   link: { prefix: "[", suffix: "](url)", defaultText: "链接文本" },
   image: { prefix: "![", suffix: "](url)", defaultText: "图片描述" },
   hr: { prefix: "\n---\n", suffix: "", defaultText: "" },
   table: {
-    prefix: "\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| ", suffix: " |", defaultText: "内容",
+    prefix: "\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| ",
+    suffix: " |",
+    defaultText: "内容",
   },
 };
 
@@ -235,16 +379,15 @@ function applyToolAction(action: string) {
   const text = selected || ta.defaultText;
 
   if (ta.block) {
-    // For block-level actions: insert at line start
     const lineStart = el.value.lastIndexOf("\n", start - 1) + 1;
     const beforeLine = el.value.substring(0, lineStart);
     const afterLine = el.value.substring(lineStart);
 
-    // If there's a selection, prefix each selected line
     if (selected) {
       const lines = selected.split("\n");
       const prefixed = lines.map((l) => ta.prefix + l).join("\n");
-      el.value = el.value.substring(0, start) + prefixed + el.value.substring(end);
+      el.value =
+        el.value.substring(0, start) + prefixed + el.value.substring(end);
       el.selectionStart = start;
       el.selectionEnd = start + prefixed.length;
     } else {
@@ -256,7 +399,8 @@ function applyToolAction(action: string) {
     }
   } else {
     const replacement = ta.prefix + text + ta.suffix;
-    el.value = el.value.substring(0, start) + replacement + el.value.substring(end);
+    el.value =
+      el.value.substring(0, start) + replacement + el.value.substring(end);
     const newEnd = start + replacement.length;
     if (!selected) {
       el.selectionStart = start + ta.prefix.length;
@@ -289,19 +433,23 @@ document.querySelectorAll("[data-action]").forEach((btn) => {
   });
 });
 
-// File operation buttons
-$("#btn-new").addEventListener("click", newFile);
-$("#btn-open").addEventListener("click", openFile);
-$("#btn-save").addEventListener("click", saveFile);
-$("#btn-save-as").addEventListener("click", saveFileAs);
+// File operations
+$("#btn-new")?.addEventListener("click", newFile);
+$("#btn-open")?.addEventListener("click", openFile);
+$("#btn-save")?.addEventListener("click", saveFile);
+$("#btn-save-as")?.addEventListener("click", saveFileAs);
 
-// View toggle buttons
-$("#btn-view-edit").addEventListener("click", () => setViewMode("edit"));
-$("#btn-view-split").addEventListener("click", () => setViewMode("split"));
-$("#btn-view-preview").addEventListener("click", () => setViewMode("preview"));
+// Sidebar
+$("#btn-sidebar-toggle")?.addEventListener("click", toggleSidebar);
+$("#btn-open-folder")?.addEventListener("click", openFolder);
 
-// Theme toggle
-$("#btn-theme").addEventListener("click", toggleTheme);
+// View toggle
+$("#btn-view-edit")?.addEventListener("click", () => setViewMode("edit"));
+$("#btn-view-split")?.addEventListener("click", () => setViewMode("split"));
+$("#btn-view-preview")?.addEventListener("click", () => setViewMode("preview"));
+
+// Theme
+$("#btn-theme")?.addEventListener("click", toggleTheme);
 
 // Keyboard shortcuts
 document.addEventListener("keydown", (e) => {
@@ -326,11 +474,46 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Initialize with sample content
+// ── Splitter Drag ─────────────────────────────────────
+function initSplitter() {
+  const splitter = $("#splitter");
+  const editorArea = $("#editor-area");
+  const editorPane = $("#editor-pane") as HTMLElement;
+  const previewPane = $("#preview-pane") as HTMLElement;
+  let dragging = false;
+
+  splitter.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    dragging = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = editorArea.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = Math.max(20, Math.min(80, (x / rect.width) * 100));
+    editorPane.style.flex = `0 0 ${pct}%`;
+    previewPane.style.flex = `0 0 ${100 - pct}%`;
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (dragging) {
+      dragging = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  });
+}
+
+// ── Initialize ─────────────────────────────────────────
 let initialized = false;
 window.addEventListener("DOMContentLoaded", () => {
   if (initialized) return;
   initialized = true;
+
+  initSplitter();
 
   editor.value = `# 欢迎使用 MD Editor
 
@@ -338,15 +521,20 @@ window.addEventListener("DOMContentLoaded", () => {
 
 ## 功能特点
 
-- 🚀 **轻量快速** - Tauri 原生桌面应用，内存占用极小
+- 🚀 **轻量快速** - Tauri 原生桌面应用
 - 📝 **实时预览** - 编辑与预览同步
-- 🎨 **语法高亮** - 支持 GFM 表格、任务列表等
-- 🌙 **暗色模式** - 护眼舒适
-- ⌨️ **快捷键** - 提升编辑效率
+- 📂 **文件夹浏览** - 点击左侧按钮打开文件夹
+- 🎨 **语法高亮** - 支持 GFM 表格、任务列表
+- 🌙 **暗色模式** - 太阳/月亮按钮切换
+- ⌨️ **快捷键** - \`Ctrl+B\` 粗体、\`Ctrl+S\` 保存
 
-## 示例
+## 快速开始
 
-### 代码块
+1. 点击工具栏 📂 **打开文件** 或 📁 **打开文件夹**
+2. 开始编辑 Markdown
+3. 使用 \`Ctrl+S\` 保存
+
+> 提示：点击左侧 ☰ 按钮展开侧边栏浏览文件
 
 \`\`\`javascript
 function hello() {
@@ -354,24 +542,13 @@ function hello() {
 }
 \`\`\`
 
-### 表格
-
-| 功能 | 状态 |
-|------|------|
-| 粗体/斜体 | ✅ |
-| 标题 | ✅ |
-| 列表 | ✅ |
-| 任务列表 | ✅ |
-| 代码块 | ✅ |
-
-### 任务列表
-
-- [x] 完成基本编辑器
-- [x] 添加实时预览
-- [ ] 添加更多主题
-- [ ] 支持插件扩展
-
-> 引用：轻量、快速、美观——这就是 MD Editor。
+| 功能 | 快捷键 |
+|------|--------|
+| 粗体 | Ctrl+B |
+| 斜体 | Ctrl+I |
+| 保存 | Ctrl+S |
+| 打开 | Ctrl+O |
+| 新建 | Ctrl+N |
 `;
 
   updatePreview();
