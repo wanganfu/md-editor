@@ -38,7 +38,6 @@ steps:
       - node --version && npm --version && rustc --version
       - npm install
       - npm run tauri:build:windows:cross
-      - ls -la src-tauri/target/release/bundle/nsis
       - tree -L 3 -a src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
 
   - name: upload to download site
@@ -49,7 +48,7 @@ steps:
     environment:
       DOWNLOAD_SITE_URL: https://app.anfu.me
       PROJECT_SLUG: MD Editor
-      ARTIFACT_DIR: src-tauri/target/release/bundle/nsis
+      ARTIFACT_DIR: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
       ARTIFACT_UPLOAD_ALL: "true"
       VERSION: "v0.1.2"
       DRONE_UPLOAD_TOKEN:
