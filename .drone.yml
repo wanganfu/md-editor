@@ -43,7 +43,12 @@ steps:
     commands:
       - mkdir -p /cache/cargo /cache/rustup /cache/npm /cache/target
       - export PATH="/cache/cargo/bin:$PATH"
-      - ln -snf /cache/target /drone/src/src-tauri/target
+      # target 必须留在 workspace，upload 步骤是独立容器，无法访问 /cache 软链
+      - |
+        if [ -d /cache/target ] && [ -n "$(ls -A /cache/target 2>/dev/null)" ]; then
+          mkdir -p src-tauri/target
+          cp -a /cache/target/. src-tauri/target/
+        fi
       - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
       - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
       - apt-get update
@@ -62,7 +67,9 @@ steps:
       - node --version && npm --version && rustc --version
       - npm install --prefer-offline --no-audit --fund=false
       - npm run tauri:build:windows:cross
+      - test -n "$(ls -A src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis 2>/dev/null)" || (echo "ERROR: NSIS 产物未生成" && exit 1)
       - ls -al src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+      - mkdir -p /cache/target && cp -a src-tauri/target/. /cache/target/
 
   - name: upload to download site
     image: git.anfu.me/anfu/drone-upload:latest
