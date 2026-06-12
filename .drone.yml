@@ -36,12 +36,13 @@ steps:
       CARGO_HOME: /cache/cargo
       RUSTUP_HOME: /cache/rustup
       NPM_CONFIG_CACHE: /cache/npm
+      XDG_CACHE_HOME: /cache/xdg-cache
       CARGO_INCREMENTAL: "0"
       CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
       CARGO_NET_RETRY: "5"
       DEBIAN_FRONTEND: noninteractive
     commands:
-      - mkdir -p /cache/cargo /cache/rustup /cache/npm /cache/target
+      - mkdir -p /cache/cargo /cache/rustup /cache/npm /cache/target /cache/xdg-cache
       - export PATH="/cache/cargo/bin:$PATH"
       # target 必须留在 workspace，upload 步骤是独立容器，无法访问 /cache 软链
       - |
