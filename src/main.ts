@@ -450,12 +450,6 @@ function updateTitle() {
   statusFilePath.textContent = currentFilePath || "";
   updateToolbarDocumentTitle();
 
-  const windowTitleEl = $("#window-title");
-  if (windowTitleEl) {
-    windowTitleEl.textContent = windowTitle;
-    windowTitleEl.title = windowTitle;
-  }
-
   void appWindow.setTitle(windowTitle).catch((err) => {
     console.error("设置窗口标题失败:", err);
   });
