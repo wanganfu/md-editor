@@ -62,6 +62,7 @@ steps:
       - node --version && npm --version && rustc --version
       - npm install --prefer-offline --no-audit --fund=false
       - npm run tauri:build:windows:cross
+      - ls -al src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
 
   - name: upload to download site
     image: git.anfu.me/anfu/drone-upload:latest
