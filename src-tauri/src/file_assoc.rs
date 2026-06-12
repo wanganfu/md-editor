@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+#[cfg(windows)]
 const PROG_ID: &str = "me.anfu.md-editor.md";
 const MD_EXTENSIONS: &[&str] = &["md", "markdown"];
 

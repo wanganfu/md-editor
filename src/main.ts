@@ -114,7 +114,17 @@ let previewTimer: ReturnType<typeof setTimeout> | null = null;
 function updatePreview() {
   if (previewTimer) clearTimeout(previewTimer);
   previewTimer = setTimeout(() => {
+    const syncRatio =
+      scrollSyncLocked && currentViewMode === "split"
+        ? getScrollRatio(editor)
+        : null;
+
     preview.innerHTML = marked.parse(editor.value) as string;
+
+    if (syncRatio !== null) {
+      applyScrollSync("editor", syncRatio);
+    }
+
     updateStatus();
   }, 100);
 }
@@ -743,7 +753,9 @@ async function initDragDrop() {
 }
 
 // ── Sync scroll (split mode, when locked) ──────────────
-let scrollSyncApplying = false;
+type ScrollPane = "editor" | "preview";
+let scrollSyncSource: ScrollPane | null = null;
+let scrollSyncClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getScrollRatio(el: HTMLElement): number {
   const maxScroll = el.scrollHeight - el.clientHeight;
@@ -753,7 +765,28 @@ function getScrollRatio(el: HTMLElement): number {
 
 function setScrollByRatio(el: HTMLElement, ratio: number) {
   const maxScroll = el.scrollHeight - el.clientHeight;
-  el.scrollTop = Math.max(0, ratio * maxScroll);
+  const top = Math.max(0, Math.min(maxScroll, ratio * maxScroll));
+  el.scrollTo({ top, behavior: "instant" });
+}
+
+function markScrollSyncSource(source: ScrollPane) {
+  scrollSyncSource = source;
+  if (scrollSyncClearTimer) clearTimeout(scrollSyncClearTimer);
+  scrollSyncClearTimer = setTimeout(() => {
+    scrollSyncSource = null;
+    scrollSyncClearTimer = null;
+  }, 64);
+}
+
+function applyScrollSync(source: ScrollPane, ratio?: number) {
+  if (!shouldSyncScroll()) return;
+
+  const resolvedRatio =
+    ratio ?? getScrollRatio(source === "editor" ? editor : preview);
+  const target = source === "editor" ? preview : editor;
+
+  markScrollSyncSource(source);
+  setScrollByRatio(target, resolvedRatio);
 }
 
 function shouldSyncScroll(): boolean {
@@ -781,22 +814,21 @@ function updateScrollLockButton() {
 function toggleScrollSyncLock() {
   scrollSyncLocked = !scrollSyncLocked;
   updateScrollLockButton();
+  if (scrollSyncLocked && currentViewMode === "split") {
+    applyScrollSync("editor");
+  }
   showToast(scrollSyncLocked ? "已锁定同步滚动" : "已取消同步滚动");
 }
 
 function initSyncScroll() {
   editor.addEventListener("scroll", () => {
-    if (scrollSyncApplying || !shouldSyncScroll()) return;
-    scrollSyncApplying = true;
-    setScrollByRatio(preview, getScrollRatio(editor));
-    scrollSyncApplying = false;
+    if (!shouldSyncScroll() || scrollSyncSource === "preview") return;
+    applyScrollSync("editor");
   });
 
   preview.addEventListener("scroll", () => {
-    if (scrollSyncApplying || !shouldSyncScroll()) return;
-    scrollSyncApplying = true;
-    setScrollByRatio(editor, getScrollRatio(preview));
-    scrollSyncApplying = false;
+    if (!shouldSyncScroll() || scrollSyncSource === "editor") return;
+    applyScrollSync("preview");
   });
 
   updateScrollLockButton();
