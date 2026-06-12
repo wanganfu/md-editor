@@ -116,10 +116,30 @@
 }
 
 .toolbar-row {
+  position: relative;
   background: var(--bg-toolbar);
   border-color: var(--border-primary);
   -webkit-app-region: drag;
 }
+.window-title {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  max-width: min(36vw, 280px);
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 0;
+}
+.toolbar-compact .window-title { display: none; }
+.toolbar-format-slot,
+.toolbar-section { position: relative; z-index: 1; }
 
 #toolbar {
   background: var(--bg-toolbar);
