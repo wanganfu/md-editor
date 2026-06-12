@@ -243,6 +243,11 @@
   border-left: 3px solid transparent; line-height: 1.4;
 }
 .sidebar-toc-item:hover { background: var(--btn-hover); }
+.sidebar-toc-item.active {
+  background: var(--bg-sidebar-active); color: var(--accent);
+  border-left-color: var(--accent); font-weight: 500;
+}
+.sidebar-toc-item.active .toc-level-dot { background: var(--accent); opacity: 1; }
 .sidebar-toc-item .toc-level-dot {
   flex-shrink: 0; width: 0.35rem; height: 0.35rem; border-radius: 9999px;
   background: var(--text-sidebar-dim); opacity: 0.65;

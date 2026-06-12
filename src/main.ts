@@ -15,6 +15,8 @@ type SidebarTab = "files" | "toc";
 let sidebarTab: SidebarTab = "files";
 let currentViewMode: ViewMode = "split";
 let scrollSyncLocked = false;
+let activeTocId: string | null = null;
+let tocHighlightRaf: number | null = null;
 
 // ── DOM refs ──────────────────────────────────────────
 const $ = <T extends HTMLElement>(sel: string) =>
@@ -169,6 +171,7 @@ function renderTocList() {
   const headings = extractHeadings(editor.value);
 
   if (headings.length === 0) {
+    activeTocId = null;
     list.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)">
       <i class="fa-solid fa-list-ul text-2xl opacity-40"></i>
       <span class="text-xs opacity-60 text-center">当前文档没有标题</span>
@@ -180,7 +183,8 @@ function renderTocList() {
     .map((heading) => {
       const indent = (heading.level - 1) * 0.75 + 0.6;
       const safeText = escapeHtml(heading.text);
-      return `<div class="sidebar-toc-item" data-id="${heading.id}" data-line="${heading.line}" title="${safeText}" style="padding-left:${indent}rem">
+      const isActive = activeTocId === heading.id;
+      return `<div class="sidebar-toc-item${isActive ? " active" : ""}" data-id="${heading.id}" data-line="${heading.line}" title="${safeText}" style="padding-left:${indent}rem">
         <span class="toc-level-dot"></span>
         <span class="truncate">${safeText}</span>
       </div>`;
@@ -192,6 +196,87 @@ function renderTocList() {
       const el = item as HTMLElement;
       scrollToHeading(el.dataset.id!, Number(el.dataset.line));
     });
+  });
+
+  updateTocHighlight();
+}
+
+function getActiveHeadingFromPreview(): string | null {
+  const headings = preview.querySelectorAll<HTMLElement>(
+    "h1[id^='heading-'], h2[id^='heading-'], h3[id^='heading-'], h4[id^='heading-'], h5[id^='heading-'], h6[id^='heading-']"
+  );
+  if (headings.length === 0) return null;
+
+  const viewportTop = preview.getBoundingClientRect().top + 8;
+  let active: string | null = null;
+
+  for (const heading of headings) {
+    if (heading.getBoundingClientRect().top <= viewportTop) {
+      active = heading.id;
+    } else {
+      break;
+    }
+  }
+
+  return active ?? headings[0].id;
+}
+
+function getActiveHeadingFromEditor(): string | null {
+  const headings = extractHeadings(editor.value);
+  if (headings.length === 0) return null;
+
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+  const topLine = Math.floor(editor.scrollTop / lineHeight);
+  let active: string | null = null;
+
+  for (const heading of headings) {
+    if (heading.line <= topLine) {
+      active = heading.id;
+    } else {
+      break;
+    }
+  }
+
+  return active ?? headings[0].id;
+}
+
+function resolveActiveHeadingId(): string | null {
+  if (currentViewMode === "edit") {
+    return getActiveHeadingFromEditor();
+  }
+  return getActiveHeadingFromPreview();
+}
+
+function setActiveTocItem(id: string | null) {
+  if (activeTocId === id) return;
+  activeTocId = id;
+
+  const list = $("#sidebar-toc-list");
+  list.querySelectorAll(".sidebar-toc-item").forEach((item) => {
+    const el = item as HTMLElement;
+    el.classList.toggle("active", el.dataset.id === id);
+  });
+
+  if (!id) return;
+
+  const activeEl = list.querySelector(
+    `.sidebar-toc-item[data-id="${CSS.escape(id)}"]`
+  );
+  activeEl?.scrollIntoView({ block: "nearest", behavior: "instant" });
+}
+
+function updateTocHighlight() {
+  if (sidebarTab !== "toc") return;
+  if ($("#sidebar-toc-list").querySelector(".sidebar-toc-item") === null) return;
+  setActiveTocItem(resolveActiveHeadingId());
+}
+
+function scheduleTocHighlightUpdate() {
+  if (sidebarTab !== "toc") return;
+  if (tocHighlightRaf !== null) cancelAnimationFrame(tocHighlightRaf);
+  tocHighlightRaf = requestAnimationFrame(() => {
+    tocHighlightRaf = null;
+    updateTocHighlight();
   });
 }
 
@@ -262,6 +347,8 @@ function renderPreview(immediate = false) {
 
     if (sidebarTab === "toc") {
       renderTocList();
+    } else {
+      scheduleTocHighlightUpdate();
     }
 
     updateStatus();
@@ -632,6 +719,7 @@ function setViewMode(mode: ViewMode) {
         previewPane.style.flex = "1 1 50%";
       }
       btnSplit.classList.add("active");
+      scrollSyncLocked = true;
       break;
     case "preview":
       clearPaneFlex();
@@ -645,6 +733,15 @@ function setViewMode(mode: ViewMode) {
   }
 
   updateScrollLockButton();
+
+  if (mode === "split" && scrollSyncLocked) {
+    requestAnimationFrame(() => {
+      applyScrollSync("editor");
+      scheduleTocHighlightUpdate();
+    });
+  } else {
+    scheduleTocHighlightUpdate();
+  }
 }
 
 // ── Theme Toggle ───────────────────────────────────────
@@ -985,11 +1082,13 @@ function toggleScrollSyncLock() {
 
 function initSyncScroll() {
   editor.addEventListener("scroll", () => {
+    scheduleTocHighlightUpdate();
     if (!shouldSyncScroll() || scrollSyncSource === "preview") return;
     applyScrollSync("editor");
   });
 
   preview.addEventListener("scroll", () => {
+    scheduleTocHighlightUpdate();
     if (!shouldSyncScroll() || scrollSyncSource === "editor") return;
     applyScrollSync("preview");
   });
