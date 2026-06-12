@@ -29,6 +29,8 @@ steps:
       - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
       - apt-get update
       - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
+      - export RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
+      - export RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
       - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
       - export PATH="$HOME/.cargo/bin:$PATH"
       - rustup target add x86_64-pc-windows-msvc
