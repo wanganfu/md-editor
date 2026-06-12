@@ -1,4 +1,8 @@
 ---
+# 加速说明：
+# 1. 宿主机持久缓存（需 trusted 仓库 + 预先创建目录）：
+#      sudo mkdir -p /var/lib/drone/cache/md-editor
+# 2. 预构建 CI 镜像（跳过每次 apt 安装，见 ci/Dockerfile.build）
 kind: pipeline
 type: docker
 name: build-windows-cross
@@ -16,27 +20,50 @@ trigger:
   event:
     - push
 
+volumes:
+  - name: build-cache
+    host:
+      path: /var/lib/drone/cache/md-editor
+
 steps:
   - name: build-nsis
-    image: docker.1ms.run/library/node:20-bookworm
+    # 未构建自定义镜像前，可临时改回 docker.1ms.run/library/node:20-bookworm 并取消下方 apt 步骤注释
+    image: git.anfu.me/anfu/md-editor-build:bookworm
+    pull: if-not-exists
+    volumes:
+      - name: build-cache
+        path: /cache
     environment:
       CI: "true"
+      CARGO_HOME: /cache/cargo
+      RUSTUP_HOME: /cache/rustup
+      NPM_CONFIG_CACHE: /cache/npm
       CARGO_INCREMENTAL: "0"
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+      CARGO_NET_RETRY: "5"
       DEBIAN_FRONTEND: noninteractive
     commands:
-      # Debian bookworm 清华源
-      - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
-      - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
-      - apt-get update
-      - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
-      - export RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
-      - export RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
-      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-      - export PATH="$HOME/.cargo/bin:$PATH"
+      - mkdir -p /cache/cargo /cache/rustup /cache/npm /cache/target
+      - export PATH="/cache/cargo/bin:$PATH"
+      - ln -snf /cache/target /drone/src/src-tauri/target
+      # 使用 node:20-bookworm 基础镜像时取消注释：
+      # - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
+      # - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
+      # - apt-get update
+      # - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
+      # Rust 工具链（缓存命中则跳过）
+      - |
+        if ! command -v rustc >/dev/null 2>&1; then
+          export RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
+          export RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+        fi
+      - 'printf "%s\n" "[source.crates-io]" "replace-with = \"rsproxy-sparse\"" "" "[source.rsproxy-sparse]" "registry = \"sparse+https://rsproxy.cn/index/\"" "" "[net]" "git-fetch-with-cli = true" "retry = 5" > /cache/cargo/config.toml'
+      - npm config set registry https://registry.npmmirror.com
       - rustup target add x86_64-pc-windows-msvc
-      - cargo install cargo-xwin --locked
+      - command -v cargo-xwin >/dev/null 2>&1 || cargo install cargo-xwin --locked
       - node --version && npm --version && rustc --version
-      - npm install
+      - npm install --prefer-offline --no-audit --fund=false
       - npm run tauri:build:windows:cross
       - tree -L 3 -a src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
 

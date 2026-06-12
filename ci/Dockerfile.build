@@ -1,0 +1,14 @@
+# 预装 Tauri 交叉编译所需的系统依赖，避免每次 CI 都 apt-get install
+# 构建：docker build -f ci/Dockerfile.build -t git.anfu.me/anfu/md-editor-build:bookworm .
+# 推送：docker push git.anfu.me/anfu/md-editor-build:bookworm
+FROM docker.1ms.run/library/node:20-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm config set registry https://registry.npmmirror.com
