@@ -18,7 +18,7 @@ trigger:
 
 steps:
   - name: build-nsis
-    image: node:20-bookworm
+    image: docker.1ms.run/library/node:20-bookworm
     environment:
       CI: "true"
       CARGO_INCREMENTAL: "0"
