@@ -69,9 +69,10 @@ steps:
       - npm install --prefer-offline --no-audit --fund=false
       - "npm run tauri:build:windows:cross"
       - 'test -n "$(ls -A src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis 2>/dev/null)" || (echo "ERROR NSIS 产物未生成" && exit 1)'
+      - cp src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+      - ls -al src-tauri/target/x86_64-pc-windows-msvc/release
       - ls -al src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
       - mkdir -p /cache/target && cp -a src-tauri/target/. /cache/target/
-      - ls -al src-tauri/target/x86_64-pc-windows-msvc/release
 
   - name: upload to download site
     image: git.anfu.me/anfu/drone-upload:latest
