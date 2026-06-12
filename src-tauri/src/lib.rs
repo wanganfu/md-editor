@@ -4,7 +4,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use tauri::{command, Manager, State};
+use tauri::{command, AppHandle, Manager, State};
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use tauri::Emitter;
 
 struct LaunchState {
   files: Mutex<Vec<String>>,
@@ -55,11 +58,43 @@ fn is_md_default_handler() -> bool {
   file_assoc::is_md_default_handler()
 }
 
-fn allow_launch_file_scopes(app: &tauri::App, files: &[PathBuf]) {
+fn allow_launch_file_scopes(app: &AppHandle, files: &[PathBuf]) {
   let asset_scope = app.asset_protocol_scope();
   for file in files {
     let _ = asset_scope.allow_file(file);
   }
+}
+
+fn normalize_opened_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+  paths
+    .into_iter()
+    .filter(|path| path.exists() && file_assoc::is_markdown_file(path))
+    .collect()
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn ingest_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
+  let paths = normalize_opened_paths(paths);
+  if paths.is_empty() {
+    return;
+  }
+
+  allow_launch_file_scopes(app, &paths);
+
+  let path_strings: Vec<String> = paths
+    .iter()
+    .map(|path| path.to_string_lossy().into_owned())
+    .collect();
+
+  if let Some(state) = app.try_state::<LaunchState>() {
+    state
+      .files
+      .lock()
+      .unwrap()
+      .extend(path_strings.iter().cloned());
+  }
+
+  let _ = app.emit("open-files", path_strings);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -68,11 +103,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .setup(|app| {
-      let launch_files: Vec<PathBuf> = file_assoc::collect_launch_files()
-        .into_iter()
-        .filter(|path| path.exists() && file_assoc::is_markdown_file(path))
-        .collect();
-      allow_launch_file_scopes(app, &launch_files);
+      let launch_files = normalize_opened_paths(file_assoc::collect_launch_files());
+      allow_launch_file_scopes(app.handle(), &launch_files);
 
       let launch_paths = launch_files
         .into_iter()
@@ -94,6 +126,18 @@ pub fn run() {
       register_md_default_handler,
       is_md_default_handler
     ])
-    .run(tauri::generate_context!())
-    .expect("error while running tauri application");
+    .build(tauri::generate_context!())
+    .expect("error while running tauri application")
+    .run(|app_handle, event| {
+      #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+      if let tauri::RunEvent::Opened { urls } = event {
+        let paths = urls
+          .into_iter()
+          .filter_map(|url| url.to_file_path().ok())
+          .collect();
+        ingest_opened_files(app_handle, paths);
+      }
+
+      let _ = (app_handle, event);
+    });
 }

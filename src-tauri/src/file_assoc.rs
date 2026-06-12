@@ -5,23 +5,43 @@ const PROG_ID: &str = "me.anfu.md-editor.md";
 const MD_EXTENSIONS: &[&str] = &["md", "markdown"];
 
 pub fn collect_launch_files() -> Vec<PathBuf> {
-  let mut files = Vec::new();
+  std::env::args()
+    .skip(1)
+    .filter_map(|arg| parse_launch_arg(&arg))
+    .collect()
+}
 
-  for maybe_file in std::env::args().skip(1) {
-    if maybe_file.starts_with('-') {
-      continue;
-    }
+pub fn parse_launch_arg(arg: &str) -> Option<PathBuf> {
+  let arg = arg.trim().trim_matches('"');
+  if arg.is_empty() || arg.starts_with('-') {
+    return None;
+  }
 
-    if let Ok(url) = url::Url::parse(&maybe_file) {
-      if let Ok(path) = url.to_file_path() {
-        files.push(path);
-      }
-    } else {
-      files.push(PathBuf::from(maybe_file));
+  if arg.starts_with("file:") {
+    return url::Url::parse(arg)
+      .ok()
+      .and_then(|url| url.to_file_path().ok());
+  }
+
+  if is_windows_abs_path(arg) || arg.starts_with('/') {
+    return Some(PathBuf::from(arg));
+  }
+
+  if let Ok(url) = url::Url::parse(arg) {
+    if url.scheme() == "file" {
+      return url.to_file_path().ok();
     }
   }
 
-  files
+  Some(PathBuf::from(arg))
+}
+
+fn is_windows_abs_path(path: &str) -> bool {
+  let bytes = path.as_bytes();
+  bytes.len() >= 3
+    && bytes[0].is_ascii_alphabetic()
+    && bytes[1] == b':'
+    && (bytes[2] == b'\\' || bytes[2] == b'/')
 }
 
 pub fn is_markdown_file(path: &Path) -> bool {

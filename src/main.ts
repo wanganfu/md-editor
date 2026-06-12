@@ -1,4 +1,5 @@
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
@@ -897,20 +898,32 @@ function initSettings() {
 }
 
 // ── Default app (Windows) ─────────────────────────────
+async function openPathsFromSystem(paths: string[]): Promise<boolean> {
+  const mdFiles = paths.filter(isMarkdownPath);
+  if (mdFiles.length === 0) return false;
+
+  const opened = await openFileByPath(mdFiles[0]);
+  if (!opened) return false;
+
+  const parent = mdFiles[0].replace(/[/\\][^/\\]+$/, "");
+  if (parent) {
+    currentFolderPath = parent;
+    await refreshFileList();
+  }
+  return true;
+}
+
+async function initOpenFileListener() {
+  await listen<string[]>("open-files", async (event) => {
+    await openPathsFromSystem(event.payload);
+  });
+}
+
 async function openLaunchFiles(): Promise<boolean> {
   try {
     const paths: string[] = await invoke("take_launch_files");
     if (paths.length === 0) return false;
-
-    const opened = await openFileByPath(paths[0]);
-    if (!opened) return false;
-
-    const parent = paths[0].replace(/[/\\][^/\\]+$/, "");
-    if (parent) {
-      currentFolderPath = parent;
-      await refreshFileList();
-    }
-    return true;
+    return openPathsFromSystem(paths);
   } catch (e) {
     console.error("打开启动文件失败:", e);
     return false;
@@ -929,6 +942,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initSettings();
   initToolbarLayout();
   applySidebarState();
+  await initOpenFileListener();
 
   const openedFromLaunch = await openLaunchFiles();
   if (!openedFromLaunch) {
