@@ -2,7 +2,7 @@
 # 加速说明：
 # 1. 宿主机持久缓存（需 trusted 仓库 + 预先创建目录）：
 #      sudo mkdir -p /var/lib/drone/cache/md-editor
-# 2. 预构建 CI 镜像（跳过每次 apt 安装，见 ci/Dockerfile.build）
+# 2. 可选：构建并推送 ci/Dockerfile.build 后，将 image 改为 git.anfu.me/anfu/md-editor-build:bookworm 可跳过 apt
 kind: pipeline
 type: docker
 name: build-windows-cross
@@ -27,9 +27,7 @@ volumes:
 
 steps:
   - name: build-nsis
-    # 未构建自定义镜像前，可临时改回 docker.1ms.run/library/node:20-bookworm 并取消下方 apt 步骤注释
-    image: git.anfu.me/anfu/md-editor-build:bookworm
-    pull: if-not-exists
+    image: docker.1ms.run/library/node:20-bookworm
     volumes:
       - name: build-cache
         path: /cache
@@ -46,11 +44,10 @@ steps:
       - mkdir -p /cache/cargo /cache/rustup /cache/npm /cache/target
       - export PATH="/cache/cargo/bin:$PATH"
       - ln -snf /cache/target /drone/src/src-tauri/target
-      # 使用 node:20-bookworm 基础镜像时取消注释：
-      # - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
-      # - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
-      # - apt-get update
-      # - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
+      - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
+      - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
+      - apt-get update
+      - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
       # Rust 工具链（缓存命中则跳过）
       - |
         if ! command -v rustc >/dev/null 2>&1; then
