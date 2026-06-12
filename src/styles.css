@@ -219,6 +219,8 @@
   color: var(--text-editor); background: var(--bg-editor);
   font-size: 0.875rem; line-height: 1.75;
   font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  user-select: text;
+  -webkit-user-select: text;
 }
 #editor::placeholder { color: var(--placeholder); }
 
@@ -241,6 +243,16 @@
 }
 
 /* ── Markdown Preview ────────────────────────────────── */
+#preview,
+#preview * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#preview a {
+  cursor: pointer;
+}
+
 .md-preview { color: var(--text-preview); line-height: 1.75; }
 .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-primary); color: var(--text-preview-heading); }
 .md-preview h2 { font-size: 1.25rem; font-weight: 700; margin: 1.25rem 0 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border-secondary); color: var(--text-preview-heading); }
