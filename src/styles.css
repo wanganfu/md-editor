@@ -214,6 +214,41 @@
 .sidebar-file.active i { opacity: 1; color: var(--accent); }
 .sidebar-file .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.sidebar-header { min-height: 2rem; }
+.sidebar-tabs { display: flex; align-items: stretch; }
+.sidebar-tab {
+  flex: 1; min-width: 0; padding: 0.4rem 0.5rem;
+  font-size: 0.75rem; font-weight: 500; line-height: 1.2;
+  color: var(--text-secondary); background: transparent;
+  border: none; border-bottom: 2px solid transparent;
+  cursor: pointer; transition: color 120ms, border-color 120ms, background 120ms;
+}
+.sidebar-tab:hover:not(.active) { background: var(--btn-hover); color: var(--text-body); }
+.sidebar-tab.active {
+  color: var(--accent); border-bottom-color: var(--accent);
+  background: var(--bg-sidebar-active);
+}
+.sidebar-refresh-btn {
+  width: 2rem; border-left: 1px solid var(--border-primary) !important;
+  border-radius: 0 !important; color: var(--text-secondary);
+}
+.sidebar-refresh-btn:hover { color: var(--text-body); background: var(--btn-hover); }
+.sidebar-panel.hidden { display: none; }
+
+.sidebar-toc-item {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.45rem 0.6rem; font-size: 0.8125rem;
+  color: var(--text-sidebar); cursor: pointer;
+  transition: background 120ms, color 120ms;
+  border-left: 3px solid transparent; line-height: 1.4;
+}
+.sidebar-toc-item:hover { background: var(--btn-hover); }
+.sidebar-toc-item .toc-level-dot {
+  flex-shrink: 0; width: 0.35rem; height: 0.35rem; border-radius: 9999px;
+  background: var(--text-sidebar-dim); opacity: 0.65;
+}
+.sidebar-toc-item .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ── Editor ──────────────────────────────────────────── */
 #editor {
   color: var(--text-editor); background: var(--bg-editor);

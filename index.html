@@ -81,14 +81,25 @@
     <div class="flex-1 flex overflow-hidden">
       <!-- Sidebar -->
       <aside id="sidebar" class="flex flex-col shrink-0 border-r overflow-hidden transition-all duration-200" style="width:0;min-width:0;background:var(--bg-sidebar);border-color:var(--border-primary)">
-        <div class="flex items-center justify-between px-3 py-1.5 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
-          <span class="text-xs font-medium" style="color:var(--text-secondary)">文件浏览器</span>
-          <button id="btn-refresh-folder" class="toolbar-btn text-xs" title="刷新"><i class="fa-solid fa-rotate"></i></button>
+        <div class="sidebar-header flex items-stretch shrink-0 border-b" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
+          <div class="sidebar-tabs flex flex-1 min-w-0">
+            <button type="button" id="sidebar-tab-files" class="sidebar-tab active" title="文档列表">文档</button>
+            <button type="button" id="sidebar-tab-toc" class="sidebar-tab" title="文档目录">目录</button>
+          </div>
+          <button type="button" id="btn-refresh-sidebar" class="sidebar-refresh-btn toolbar-btn text-xs shrink-0" title="刷新"><i class="fa-solid fa-rotate"></i></button>
         </div>
-        <div class="flex-1 overflow-y-auto p-1" id="sidebar-file-list">
-          <div class="flex flex-col items-center justify-center h-full gap-2" style="color:var(--text-secondary)" id="sidebar-empty">
-            <i class="fa-solid fa-folder-open text-2xl opacity-40"></i>
-            <span class="text-xs opacity-60">打开文件夹以浏览文件</span>
+        <div class="flex-1 overflow-y-auto p-1 min-h-0 relative">
+          <div class="sidebar-panel h-full" id="sidebar-file-list">
+            <div class="flex flex-col items-center justify-center h-full gap-2" style="color:var(--text-secondary)" id="sidebar-empty">
+              <i class="fa-solid fa-folder-open text-2xl opacity-40"></i>
+              <span class="text-xs opacity-60">打开文件夹以浏览文件</span>
+            </div>
+          </div>
+          <div class="sidebar-panel hidden h-full" id="sidebar-toc-list">
+            <div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)" id="sidebar-toc-empty">
+              <i class="fa-solid fa-list-ul text-2xl opacity-40"></i>
+              <span class="text-xs opacity-60 text-center">当前文档没有标题</span>
+            </div>
           </div>
         </div>
         <div class="px-2 py-1 border-t text-[10px] shrink-0 truncate" style="background:var(--bg-pane-header);border-color:var(--border-primary);color:var(--text-secondary)" id="sidebar-folder-path"></div>

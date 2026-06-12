@@ -11,6 +11,8 @@ let isModified = false;
 type ViewMode = "edit" | "split" | "preview";
 let isDark = false;
 let sidebarVisible = false;
+type SidebarTab = "files" | "toc";
+let sidebarTab: SidebarTab = "files";
 let currentViewMode: ViewMode = "split";
 let scrollSyncLocked = false;
 
@@ -110,24 +112,174 @@ marked.use({
   },
 });
 
+interface TocEntry {
+  level: number;
+  text: string;
+  id: string;
+  line: number;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/"/g, "&quot;");
+}
+
+function extractHeadings(text: string): TocEntry[] {
+  const items: TocEntry[] = [];
+  const lines = text.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(#{1,6})\s+(.+)$/);
+    if (!match) continue;
+
+    const level = match[1].length;
+    const headingText = match[2].trim().replace(/\s+#+\s*$/, "");
+    items.push({
+      level,
+      text: headingText,
+      id: `heading-${items.length}`,
+      line: i,
+    });
+  }
+
+  return items;
+}
+
+function addHeadingIds(html: string): string {
+  let index = 0;
+  return html.replace(/<h([1-6])(\s[^>]*)?>/gi, (match, _level, attrs = "") => {
+    if (/\bid\s*=/.test(attrs)) return match;
+    const id = `heading-${index++}`;
+    return `<h${_level} id="${id}"${attrs}>`;
+  });
+}
+
+function renderFileListEmpty(message: string) {
+  const list = $("#sidebar-file-list");
+  list.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)">
+    <i class="fa-solid fa-folder-open text-2xl opacity-40"></i>
+    <span class="text-xs opacity-60 text-center">${message}</span>
+  </div>`;
+}
+
+function renderTocList() {
+  const list = $("#sidebar-toc-list");
+  const headings = extractHeadings(editor.value);
+
+  if (headings.length === 0) {
+    list.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)">
+      <i class="fa-solid fa-list-ul text-2xl opacity-40"></i>
+      <span class="text-xs opacity-60 text-center">当前文档没有标题</span>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = headings
+    .map((heading) => {
+      const indent = (heading.level - 1) * 0.75 + 0.6;
+      const safeText = escapeHtml(heading.text);
+      return `<div class="sidebar-toc-item" data-id="${heading.id}" data-line="${heading.line}" title="${safeText}" style="padding-left:${indent}rem">
+        <span class="toc-level-dot"></span>
+        <span class="truncate">${safeText}</span>
+      </div>`;
+    })
+    .join("");
+
+  list.querySelectorAll(".sidebar-toc-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const el = item as HTMLElement;
+      scrollToHeading(el.dataset.id!, Number(el.dataset.line));
+    });
+  });
+}
+
+function setSidebarTab(tab: SidebarTab) {
+  sidebarTab = tab;
+  $("#sidebar-tab-files").classList.toggle("active", tab === "files");
+  $("#sidebar-tab-toc").classList.toggle("active", tab === "toc");
+  $("#sidebar-file-list").classList.toggle("hidden", tab !== "files");
+  $("#sidebar-toc-list").classList.toggle("hidden", tab !== "toc");
+
+  if (tab === "files") {
+    void refreshFileList();
+  } else {
+    renderTocList();
+  }
+}
+
+function scrollEditorToLine(lineIndex: number) {
+  const lines = editor.value.split("\n");
+  let pos = 0;
+  for (let i = 0; i < lineIndex && i < lines.length; i++) {
+    pos += lines[i].length + 1;
+  }
+
+  editor.focus();
+  editor.setSelectionRange(pos, pos);
+
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+  editor.scrollTop = Math.max(0, lineIndex * lineHeight - editor.clientHeight * 0.25);
+}
+
+function scrollToHeading(id: string, lineIndex: number) {
+  if (currentViewMode !== "edit") {
+    const target = preview.querySelector(`#${CSS.escape(id)}`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+  }
+
+  scrollEditorToLine(lineIndex);
+}
+
+async function refreshSidebar() {
+  if (sidebarTab === "files") {
+    await refreshFileList();
+    return;
+  }
+
+  renderPreview(true);
+}
+
 // ── Preview update (debounced) ─────────────────────────
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
-function updatePreview() {
-  if (previewTimer) clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => {
+
+function renderPreview(immediate = false) {
+  const run = () => {
     const syncRatio =
       scrollSyncLocked && currentViewMode === "split"
         ? getScrollRatio(editor)
         : null;
 
-    preview.innerHTML = marked.parse(editor.value) as string;
+    preview.innerHTML = addHeadingIds(marked.parse(editor.value) as string);
 
     if (syncRatio !== null) {
       applyScrollSync("editor", syncRatio);
     }
 
+    if (sidebarTab === "toc") {
+      renderTocList();
+    }
+
     updateStatus();
-  }, 100);
+  };
+
+  if (immediate) {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = null;
+    run();
+    return;
+  }
+
+  if (previewTimer) clearTimeout(previewTimer);
+  previewTimer = setTimeout(run, 100);
+}
+
+function updatePreview() {
+  renderPreview(false);
 }
 
 // ── Status bar ─────────────────────────────────────────
@@ -269,13 +421,19 @@ async function openFolder() {
 }
 
 async function refreshFileList() {
-  if (!currentFolderPath) return;
+  const list = $("#sidebar-file-list");
+  const folderLabel = $("#sidebar-folder-path");
+
+  if (!currentFolderPath) {
+    folderLabel.textContent = "";
+    renderFileListEmpty("打开文件夹以浏览文件");
+    return;
+  }
+
   try {
     const files: string[] = await invoke("list_md_files", {
       dir: currentFolderPath,
     });
-    const list = $("#sidebar-file-list");
-    const folderLabel = $("#sidebar-folder-path");
     folderLabel.textContent =
       currentFolderPath.split(/[/\\]/).pop() || currentFolderPath;
 
@@ -295,7 +453,6 @@ async function refreshFileList() {
       })
       .join("");
 
-    // Click handler
     list.querySelectorAll(".sidebar-file").forEach((item) => {
       item.addEventListener("click", async () => {
         const path = (item as HTMLElement).dataset.path!;
@@ -630,6 +787,11 @@ $("#btn-save-as")?.addEventListener("click", saveFileAs);
 // Sidebar
 $("#btn-sidebar-toggle")?.addEventListener("click", toggleSidebar);
 $("#btn-open-folder")?.addEventListener("click", openFolder);
+$("#sidebar-tab-files")?.addEventListener("click", () => setSidebarTab("files"));
+$("#sidebar-tab-toc")?.addEventListener("click", () => setSidebarTab("toc"));
+$("#btn-refresh-sidebar")?.addEventListener("click", () => {
+  void refreshSidebar();
+});
 
 // View toggle
 $("#btn-view-edit")?.addEventListener("click", () => setViewMode("edit"));
@@ -942,6 +1104,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   initSettings();
   initToolbarLayout();
   applySidebarState();
+  setSidebarTab("files");
   await initOpenFileListener();
 
   const openedFromLaunch = await openLaunchFiles();
