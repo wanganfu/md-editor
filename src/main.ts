@@ -35,7 +35,7 @@ $("#btn-close")?.addEventListener("click", () => appWindow.close());
 marked.setOptions({ breaks: true, gfm: true });
 
 const REMOTE_URL_RE =
-  /^(https?:|data:|mailto:|javascript:|#|asset:|blob:|https:\/\/asset\.)/i;
+  /^(https?:|\/\/|data:|mailto:|javascript:|#|asset:|blob:|https:\/\/asset\.)/i;
 
 function isRemoteResourceUrl(url: string): boolean {
   return REMOTE_URL_RE.test(url);
