@@ -1,0 +1,77 @@
+---
+kind: pipeline
+type: docker
+name: build-windows-cross
+
+platform:
+  os: linux
+  arch: amd64
+
+node:
+  runner: localagent
+
+trigger:
+  branch:
+    - master
+  event:
+    - push
+
+steps:
+  - name: build-nsis
+    image: node:20-bookworm
+    environment:
+      CI: "true"
+      CARGO_INCREMENTAL: "0"
+      DEBIAN_FRONTEND: noninteractive
+    commands:
+      # Debian bookworm 清华源
+      - sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
+      - sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources
+      - apt-get update
+      - apt-get install -y --no-install-recommends curl ca-certificates pkg-config build-essential wget file libssl-dev nsis lld clang llvm
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+      - export PATH="$HOME/.cargo/bin:$PATH"
+      - rustup target add x86_64-pc-windows-msvc
+      - cargo install cargo-xwin --locked
+      - node --version && npm --version && rustc --version
+      - npm install
+      - npm run tauri:build:windows:cross
+      - ls -la src-tauri/target/release/bundle/nsis
+      - tree -L 3 -a src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+
+  - name: upload to download site
+    image: git.anfu.me/anfu/drone-upload:latest
+    pull: always
+    depends_on:
+      - build-nsis
+    environment:
+      DOWNLOAD_SITE_URL: https://app.anfu.me
+      PROJECT_SLUG: MD Editor
+      ARTIFACT_DIR: src-tauri/target/release/bundle/nsis
+      ARTIFACT_UPLOAD_ALL: "true"
+      VERSION: "v0.1.2"
+      DRONE_UPLOAD_TOKEN:
+        from_secret: download_site_upload_token
+
+  - name: "完成通知"
+    image: git.anfu.me/anfu/docker-email-notify:latest
+    pull: always
+    depends_on:
+      - upload to download site
+    when:
+      status:
+        - success
+        - failure
+    environment:
+      EMAIL_HOST:
+        from_secret: email_host
+      EMAIL_PASS:
+        from_secret: email_pass
+      EMAIL_NAME:
+        from_secret: email_name
+      EMAIL_PORT:
+        from_secret: email_port
+      EMAIL_FROM:
+        from_secret: email_from
+      EMAIL_TO:
+        from_secret: email_to
