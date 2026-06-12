@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MD Editor</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body class="h-screen flex flex-col">
+    <!-- Title Bar -->
+    <header class="flex items-center justify-between px-4 py-2 border-b select-none" style="background:var(--bg-header);border-color:var(--border-primary)" data-tauri-drag-region>
+      <div class="flex items-center gap-3">
+        <span class="font-bold text-sm tracking-wide" style="color:var(--accent)">MD Editor</span>
+        <span id="file-name" style="color:var(--text-secondary)" class="text-xs">未命名</span>
+        <span id="modified-dot" class="w-2 h-2 rounded-full hidden" style="background:#f59e0b"></span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button id="btn-new" class="toolbar-btn" title="新建 (Ctrl+N)"><i class="fa-solid fa-file-plus"></i></button>
+        <button id="btn-open" class="toolbar-btn" title="打开 (Ctrl+O)"><i class="fa-solid fa-folder-open"></i></button>
+        <button id="btn-save" class="toolbar-btn" title="保存 (Ctrl+S)"><i class="fa-solid fa-floppy-disk"></i></button>
+        <button id="btn-save-as" class="toolbar-btn" title="另存为 (Ctrl+Shift+S)"><i class="fa-solid fa-download"></i></button>
+        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+        <button id="btn-view-edit" class="toolbar-btn" title="仅编辑"><i class="fa-solid fa-pen-to-square"></i></button>
+        <button id="btn-view-split" class="toolbar-btn" title="分屏"><i class="fa-solid fa-columns"></i></button>
+        <button id="btn-view-preview" class="toolbar-btn" title="仅预览"><i class="fa-solid fa-eye"></i></button>
+        <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
+        <button id="btn-theme" class="toolbar-btn" title="切换主题"><i class="fa-solid fa-moon"></i></button>
+      </div>
+    </header>
+
+    <!-- Toolbar -->
+    <nav id="toolbar" class="flex items-center gap-0.5 px-4 py-1.5 border-b overflow-x-auto select-none" style="background:var(--bg-toolbar);border-color:var(--border-primary)">
+      <button class="toolbar-btn font-bold" data-action="bold" title="粗体 (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
+      <button class="toolbar-btn italic" data-action="italic" title="斜体 (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
+      <button class="toolbar-btn" data-action="strikethrough" title="删除线"><i class="fa-solid fa-strikethrough"></i></button>
+      <span class="w-px h-4 mx-1" style="background:var(--border-secondary)"></span>
+      <button class="toolbar-btn" data-action="heading1" title="标题 1"><i class="fa-solid fa-heading"></i><span class="text-[10px] ml-0.5">1</span></button>
+      <button class="toolbar-btn" data-action="heading2" title="标题 2"><i class="fa-solid fa-heading"></i><span class="text-[10px] ml-0.5">2</span></button>
+      <button class="toolbar-btn" data-action="heading3" title="标题 3"><i class="fa-solid fa-heading"></i><span class="text-[10px] ml-0.5">3</span></button>
+      <span class="w-px h-4 mx-1" style="background:var(--border-secondary)"></span>
+      <button class="toolbar-btn" data-action="ul" title="无序列表"><i class="fa-solid fa-list-ul"></i></button>
+      <button class="toolbar-btn" data-action="ol" title="有序列表"><i class="fa-solid fa-list-ol"></i></button>
+      <button class="toolbar-btn" data-action="task" title="任务列表"><i class="fa-solid fa-square-check"></i></button>
+      <span class="w-px h-4 mx-1" style="background:var(--border-secondary)"></span>
+      <button class="toolbar-btn" data-action="quote" title="引用"><i class="fa-solid fa-quote-right"></i></button>
+      <button class="toolbar-btn" data-action="code" title="行内代码"><i class="fa-solid fa-code"></i></button>
+      <button class="toolbar-btn" data-action="codeblock" title="代码块"><i class="fa-solid fa-file-code"></i></button>
+      <button class="toolbar-btn" data-action="link" title="链接"><i class="fa-solid fa-link"></i></button>
+      <button class="toolbar-btn" data-action="image" title="图片"><i class="fa-solid fa-image"></i></button>
+      <span class="w-px h-4 mx-1" style="background:var(--border-secondary)"></span>
+      <button class="toolbar-btn" data-action="hr" title="分割线"><i class="fa-solid fa-minus"></i></button>
+      <button class="toolbar-btn" data-action="table" title="表格"><i class="fa-solid fa-table"></i></button>
+    </nav>
+
+    <!-- Editor Area -->
+    <main id="editor-area" class="flex-1 flex overflow-hidden">
+      <section id="editor-pane" class="flex-1 flex flex-col" style="border-color:var(--border-pane)">
+        <div class="flex items-center justify-between px-3 py-1 border-b" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
+          <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)">Markdown</span>
+          <span id="editor-stats" class="text-xs" style="color:var(--text-secondary)"></span>
+        </div>
+        <textarea
+          id="editor"
+          class="flex-1 w-full p-4 resize-none outline-none font-mono text-sm leading-relaxed"
+          style="background:var(--bg-editor);color:var(--text-editor)"
+          placeholder="开始编写 Markdown..."
+          spellcheck="false"
+        ></textarea>
+      </section>
+
+      <section id="preview-pane" class="flex-1 flex flex-col">
+        <div class="flex items-center justify-between px-3 py-1 border-b" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
+          <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)">Preview</span>
+          <span id="preview-stats" class="text-xs" style="color:var(--text-secondary)"></span>
+        </div>
+        <div id="preview" class="flex-1 overflow-y-auto p-6 md-preview" style="background:var(--bg-preview)"></div>
+      </section>
+    </main>
+
+    <!-- Status Bar -->
+    <footer class="flex items-center justify-between px-4 py-1 border-t text-xs select-none" style="background:var(--bg-status);border-color:var(--border-primary);color:var(--text-secondary)">
+      <div class="flex items-center gap-4">
+        <span id="status-words">0 词</span>
+        <span id="status-chars">0 字符</span>
+        <span id="status-lines">0 行</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="status-cursor">行 1, 列 1</span>
+        <span id="status-file-path" style="color:var(--text-secondary)"></span>
+      </div>
+    </footer>
+
+    <input type="file" id="file-input" accept=".md,.markdown,.txt" class="hidden" />
+  </body>
+</html>
