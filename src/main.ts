@@ -388,12 +388,68 @@ function updateStatus() {
 }
 
 // ── Title update ───────────────────────────────────────
-function updateTitle() {
-  const base = currentFilePath
+function extractDocumentTitle(text: string): string | null {
+  for (const line of text.split("\n")) {
+    const match = line.match(/^#\s+(.+)$/);
+    if (!match) continue;
+
+    const title = match[1].trim().replace(/\s+#+\s*$/, "");
+    if (title) return title;
+  }
+
+  return null;
+}
+
+function getToolbarDocumentTitle(): string {
+  const headingTitle = extractDocumentTitle(editor.value);
+  if (headingTitle) return headingTitle;
+
+  if (currentFilePath) {
+    return currentFilePath.split(/[/\\]/).pop() || "未命名";
+  }
+
+  return "未命名";
+}
+
+type FileSaveState = "saved" | "modified" | "new";
+
+const FILE_STATUS_LABELS: Record<FileSaveState, string> = {
+  saved: "已保存",
+  modified: "已修改，未保存",
+  new: "新建，未保存",
+};
+
+function getFileSaveState(): FileSaveState {
+  if (!currentFilePath) return "new";
+  if (isModified) return "modified";
+  return "saved";
+}
+
+function updateToolbarDocumentTitle() {
+  const title = getToolbarDocumentTitle();
+  const fileNameEl = $("#file-name");
+  fileNameEl.textContent = title;
+  fileNameEl.title = title;
+
+  const state = getFileSaveState();
+  const dot = $("#file-status-dot");
+  dot.dataset.state = state;
+  dot.title = FILE_STATUS_LABELS[state];
+}
+
+function getWindowTitle(): string {
+  const fileLabel = currentFilePath
     ? currentFilePath.split(/[/\\]/).pop() || "未命名"
     : "未命名";
-  document.title = (isModified ? "* " : "") + base + " - MD Editor";
+  return (isModified ? "* " : "") + fileLabel + " - MD Editor";
+}
+
+function updateTitle() {
+  const windowTitle = getWindowTitle();
+  document.title = windowTitle;
   statusFilePath.textContent = currentFilePath || "";
+  updateToolbarDocumentTitle();
+  void appWindow.setTitle(windowTitle);
 }
 
 function markModified() {
@@ -861,6 +917,7 @@ function applyToolAction(action: string) {
 // ── Event Listeners ────────────────────────────────────
 editor.addEventListener("input", () => {
   markModified();
+  updateToolbarDocumentTitle();
   updatePreview();
 });
 
@@ -1249,6 +1306,7 @@ function hello() {
 
   updateStatus();
   setViewMode("split");
+  updateTitle();
 });
 
 // Handle beforeunload

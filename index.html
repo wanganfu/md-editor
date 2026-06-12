@@ -18,10 +18,10 @@
           <button id="btn-open-folder" class="toolbar-btn" title="打开文件夹"><i class="fa-solid fa-folder-plus"></i></button>
           <button id="btn-settings" class="toolbar-btn" title="设置"><i class="fa-solid fa-gear"></i></button>
           <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-          <span class="flex items-center gap-1.5 px-1 select-none" id="logo-area">
-            <i class="fa-brands fa-markdown text-lg" style="color:var(--accent)"></i>
-            <span id="file-name" class="text-xs font-medium truncate max-w-[160px]" style="color:var(--text-body)">未命名</span>
-            <span id="modified-dot" class="w-2 h-2 rounded-full hidden shrink-0" style="background:#f59e0b"></span>
+          <span class="flex items-center gap-1.5 px-1 select-none min-w-0 max-w-[200px]" id="logo-area">
+            <i class="fa-brands fa-markdown text-lg shrink-0" style="color:var(--accent)"></i>
+            <span id="file-name" class="text-xs font-medium min-w-0 truncate" style="color:var(--text-body)" title="未命名">未命名</span>
+            <span id="file-status-dot" class="file-status-dot shrink-0" data-state="new" title="新建，未保存"></span>
           </span>
         </div>
 

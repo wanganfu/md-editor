@@ -43,6 +43,9 @@
   --preview-pre-bg: #f3f4f6;
   --win-close-hover: #ef4444;
   --logo-color: #3b82f6;
+  --status-saved: #22c55e;
+  --status-modified: #f59e0b;
+  --status-new: #60a5fa;
 }
 
 .dark {
@@ -86,6 +89,9 @@
   --preview-pre-bg: #111827;
   --win-close-hover: #dc2626;
   --logo-color: #60a5fa;
+  --status-saved: #4ade80;
+  --status-modified: #fbbf24;
+  --status-new: #93c5fd;
 }
 
 /* ── Base ────────────────────────────────────────────── */
@@ -153,6 +159,21 @@
 .settings-dialog {
   -webkit-app-region: no-drag;
 }
+#logo-area { max-width: 200px; }
+#file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.file-status-dot[data-state="saved"] { background: var(--status-saved); }
+.file-status-dot[data-state="modified"] { background: var(--status-modified); }
+.file-status-dot[data-state="new"] { background: var(--status-new); }
 
 /* ── Toolbar buttons ─────────────────────────────────── */
 .toolbar-btn {
