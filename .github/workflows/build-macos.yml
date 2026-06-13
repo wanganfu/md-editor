@@ -1,0 +1,83 @@
+# macOS 打包（GitHub 免费 macOS Runner）
+# 在 GitHub 仓库 Settings → Secrets 中配置：
+#   DOWNLOAD_SITE_UPLOAD_TOKEN（可选，用于上传到 app.anfu.me）
+#
+# 若代码托管在 git.anfu.me，可将此 workflow 同步到 GitHub 镜像仓库触发。
+
+name: Build macOS
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Configure npm mirror
+        run: npm config set registry https://registry.npmmirror.com
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Configure cargo mirror
+        run: |
+          mkdir -p "$HOME/.cargo"
+          cat >> "$HOME/.cargo/config.toml" <<'EOF'
+          [source.crates-io]
+          replace-with = "rsproxy-sparse"
+
+          [source.rsproxy-sparse]
+          registry = "sparse+https://rsproxy.cn/index/"
+
+          [net]
+          git-fetch-with-cli = true
+          retry = 5
+          EOF
+
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      - name: Build Apple Silicon dmg
+        run: npm run tauri:build:mac:arm
+
+      - name: Build Intel dmg
+        run: npm run tauri:build:mac:intel
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist/macos
+          cp src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist/macos/ 2>/dev/null || true
+          cp src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist/macos/ 2>/dev/null || true
+          ls -la dist/macos
+          test -n "$(ls dist/macos/*.dmg 2>/dev/null)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/macos/*.dmg
+          retention-days: 30
+
+      # 可选：上传到下载站（需配置 secret）
+      # - name: Upload to download site
+      #   if: github.ref_type == 'tag'
+      #   env:
+      #     DRONE_UPLOAD_TOKEN: ${{ secrets.DOWNLOAD_SITE_UPLOAD_TOKEN }}
+      #   run: |
+      #     docker run --rm -v "$PWD/dist/macos:/artifacts" \
+      #       -e DOWNLOAD_SITE_URL=https://app.anfu.me \
+      #       -e PROJECT_SLUG="MD Editor" \
+      #       -e ARTIFACT_DIR=/artifacts \
+      #       -e ARTIFACT_UPLOAD_ALL=true \
+      #       -e DRONE_UPLOAD_TOKEN \
+      #       git.anfu.me/anfu/drone-upload:latest

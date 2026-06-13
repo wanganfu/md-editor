@@ -11,9 +11,10 @@
     "tauri:build": "tauri build",
     "tauri:build:windows": "tauri build",
     "tauri:build:windows:cross": "tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis",
+    "tauri:build:linux:deb-rpm": "tauri build --bundles deb,rpm",
     "tauri:build:mac": "tauri build",
-    "tauri:build:mac:arm": "tauri build --target aarch64-apple-darwin",
-    "tauri:build:mac:intel": "tauri build --target x86_64-apple-darwin",
+    "tauri:build:mac:arm": "tauri build --target aarch64-apple-darwin --bundles dmg",
+    "tauri:build:mac:intel": "tauri build --target x86_64-apple-darwin --bundles dmg",
     "tauri:build:mac:universal": "tauri build --target universal-apple-darwin"
   },
   "dependencies": {
