@@ -142,14 +142,15 @@ pub fn run() {
     .expect("error while running tauri application")
     .run(|app_handle, event| {
       #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-      if let tauri::RunEvent::Opened { urls } = event {
+      if let tauri::RunEvent::Opened { ref urls } = event {
         let paths = urls
-          .into_iter()
+          .iter()
           .filter_map(|url| url.to_file_path().ok())
           .collect();
         ingest_opened_files(app_handle, paths);
       }
 
+      #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
       let _ = (app_handle, event);
     });
 }
