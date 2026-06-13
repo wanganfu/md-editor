@@ -36,6 +36,24 @@ pub fn parse_launch_arg(arg: &str) -> Option<PathBuf> {
   Some(PathBuf::from(arg))
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+pub fn path_from_opened_url(url: &url::Url) -> Option<PathBuf> {
+  if let Ok(path) = url.to_file_path() {
+    if path.is_file() {
+      return Some(path);
+    }
+  }
+
+  if url.scheme() == "file" {
+    let path = PathBuf::from(url.path());
+    if path.is_file() {
+      return Some(path);
+    }
+  }
+
+  parse_launch_arg(url.as_str()).filter(|path| path.is_file())
+}
+
 fn is_windows_abs_path(path: &str) -> bool {
   let bytes = path.as_bytes();
   bytes.len() >= 3

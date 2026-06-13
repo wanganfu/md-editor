@@ -80,7 +80,15 @@ fn normalize_opened_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-fn ingest_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
+fn paths_from_opened_urls(urls: &[url::Url]) -> Vec<PathBuf> {
+  urls
+    .iter()
+    .filter_map(|url| file_assoc::path_from_opened_url(url))
+    .collect()
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn queue_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
   let paths = normalize_opened_paths(paths);
   if paths.is_empty() {
     return;
@@ -93,15 +101,17 @@ fn ingest_opened_files(app: &AppHandle, paths: Vec<PathBuf>) {
     .map(|path| path.to_string_lossy().into_owned())
     .collect();
 
-  if let Some(state) = app.try_state::<LaunchState>() {
-    state
-      .files
-      .lock()
-      .unwrap()
-      .extend(path_strings.iter().cloned());
-  }
+  app
+    .state::<LaunchState>()
+    .files
+    .lock()
+    .unwrap()
+    .extend(path_strings.iter().cloned());
 
-  let _ = app.emit("open-files", path_strings);
+  let _ = app.emit("open-files", &path_strings);
+  if let Some(window) = app.get_webview_window("main") {
+    let _ = window.emit("open-files", &path_strings);
+  }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -109,18 +119,26 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
+    .manage(LaunchState {
+      files: Mutex::new(Vec::new()),
+    })
     .setup(|app| {
       let launch_files = normalize_opened_paths(file_assoc::collect_launch_files());
       allow_launch_file_scopes(app.handle(), &launch_files);
 
-      let launch_paths = launch_files
-        .into_iter()
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect();
+      if !launch_files.is_empty() {
+        let path_strings: Vec<String> = launch_files
+          .iter()
+          .map(|path| path.to_string_lossy().into_owned())
+          .collect();
 
-      app.manage(LaunchState {
-        files: Mutex::new(launch_paths),
-      });
+        app
+          .state::<LaunchState>()
+          .files
+          .lock()
+          .unwrap()
+          .extend(path_strings);
+      }
 
       Ok(())
     })
@@ -143,11 +161,8 @@ pub fn run() {
     .run(|app_handle, event| {
       #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
       if let tauri::RunEvent::Opened { ref urls } = event {
-        let paths = urls
-          .iter()
-          .filter_map(|url| url.to_file_path().ok())
-          .collect();
-        ingest_opened_files(app_handle, paths);
+        let paths = paths_from_opened_urls(urls);
+        queue_opened_files(app_handle, paths);
       }
 
       #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]

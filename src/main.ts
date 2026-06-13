@@ -1812,11 +1812,32 @@ function initSettings() {
   });
 }
 
-// ── Default app (Windows) ─────────────────────────────
-async function initOpenFileListener() {
-  await listen<string[]>("open-files", async (event) => {
-    await openPathsFromSystem(event.payload);
-  });
+// ── Default app / system file open ─────────────────────
+let appReadyForOpenFiles = false;
+const pendingOpenFilePaths: string[] = [];
+
+void listen<string[]>("open-files", async (event) => {
+  const paths = event.payload ?? [];
+  if (!paths.length) return;
+
+  if (!appReadyForOpenFiles) {
+    pendingOpenFilePaths.push(...paths);
+    return;
+  }
+
+  await openPathsFromSystem(paths);
+});
+
+async function tryOpenLaunchFiles(): Promise<boolean> {
+  if (await openLaunchFiles()) return true;
+
+  // macOS may deliver RunEvent::Opened shortly after the first take_launch_files call.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    if (await openLaunchFiles()) return true;
+  }
+
+  return false;
 }
 
 async function openLaunchFiles(): Promise<boolean> {
@@ -1847,9 +1868,14 @@ window.addEventListener("DOMContentLoaded", async () => {
   documentHistory = await loadDocumentHistory();
   await applyAppSettings(appSettings, { startup: true });
 
-  await initOpenFileListener();
+  let openedFromLaunch = await tryOpenLaunchFiles();
+  if (!openedFromLaunch && pendingOpenFilePaths.length > 0) {
+    openedFromLaunch = await openPathsFromSystem([...pendingOpenFilePaths]);
+    pendingOpenFilePaths.length = 0;
+  }
 
-  const openedFromLaunch = await openLaunchFiles();
+  appReadyForOpenFiles = true;
+
   if (!openedFromLaunch) {
     editor.value = getWelcomeContent();
     updatePreview();
