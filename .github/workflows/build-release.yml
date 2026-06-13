@@ -177,15 +177,16 @@ jobs:
   notify-email:
     name: notify-email
     runs-on: ubuntu-latest
+    # secrets 不能在 if 表达式中使用；用仓库/环境变量 EMAIL_NOTIFICATIONS_ENABLED=true 开启邮件
+    if: always() && vars.EMAIL_NOTIFICATIONS_ENABLED == 'true'
+    environment: secrets
     needs:
       - build-windows
       - build-linux
       - build-macos
       - publish-github-release
-    if: always()
     steps:
       - name: Send email notification
-        if: ${{ secrets.EMAIL_HOST != '' }}
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: ${{ secrets.EMAIL_HOST }}
