@@ -7,6 +7,7 @@ source "$SCRIPT_DIR/common.sh"
 
 read_app_version
 setup_build_env
+clean_windows_bundle_output
 ensure_apt_packages \
   curl ca-certificates pkg-config build-essential wget file libssl-dev \
   nsis lld clang llvm
@@ -25,16 +26,23 @@ test -n "$(ls -A "$NSIS_DIR" 2>/dev/null)" || {
   exit 1
 }
 
-cp "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" "$NSIS_DIR/"
-ls -al "src-tauri/target/x86_64-pc-windows-msvc/release"
-ls -al "$NSIS_DIR"
-save_target_cache
-
 SETUP_EXE="$(find "$NSIS_DIR" -maxdepth 1 -name '*-setup.exe' -print -quit)"
 test -n "$SETUP_EXE" || {
   echo "ERROR: NSIS setup.exe 未找到"
   ls -al "$NSIS_DIR"
   exit 1
 }
-mv "$SETUP_EXE" "$NSIS_DIR/MDEditor-${VERSION}-windows-x64-setup.exe"
-mv "$NSIS_DIR/md-editor.exe" "$NSIS_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"
+
+DIST_DIR="dist/windows"
+mkdir -p "$DIST_DIR"
+rm -rf "${DIST_DIR:?}"/*
+
+mv "$SETUP_EXE" "$DIST_DIR/MDEditor-${VERSION}-windows-x64-setup.exe"
+cp "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" \
+  "$DIST_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"
+
+ls -al "$DIST_DIR"
+
+# 避免旧安装包再次进入 target 缓存
+clean_windows_bundle_output
+save_target_cache

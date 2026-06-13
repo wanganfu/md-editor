@@ -82,3 +82,13 @@ read_app_version() {
   VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
   export VERSION
 }
+
+# target 缓存会带回旧版 bundle，Tauri 只追加新文件不删旧文件
+clean_windows_bundle_output() {
+  rm -rf src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+}
+
+clean_linux_bundle_output() {
+  rm -rf src-tauri/target/release/bundle/deb
+  rm -rf src-tauri/target/release/bundle/rpm
+}

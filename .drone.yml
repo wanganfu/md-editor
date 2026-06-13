@@ -59,7 +59,7 @@ steps:
       ARTIFACT_UPLOAD_ALL: "true"
       DRONE_UPLOAD_TOKEN:
         from_secret: download_site_upload_token
-      ARTIFACT_DIR: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis
+      ARTIFACT_DIR: dist/windows
 
   - name: upload-linux
     image: *upload_image
