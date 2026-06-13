@@ -3,9 +3,6 @@ name: Build Release
 
 on:
   push:
-    branches:
-      - master
-      - main
     tags:
       - "v*"
 
@@ -139,26 +136,12 @@ jobs:
           name: macos-dist
           path: dist/macos
 
-      - name: Read app version
-        id: version
-        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
-
       - name: Resolve release tag
         id: release
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            TAG="${GITHUB_REF_NAME}"
-            NAME="MD Editor ${GITHUB_REF_NAME#v}"
-            PRERELEASE=false
-          else
-            TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
-            NAME="MD Editor v${VERSION} (build ${GITHUB_RUN_NUMBER})"
-            PRERELEASE=true
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          echo "name=MD Editor ${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=false" >> "$GITHUB_OUTPUT"
 
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2

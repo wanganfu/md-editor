@@ -10,10 +10,10 @@ node:
   runner: localagent
 
 trigger:
-  branch:
-    - master
   event:
-    - push
+    - tag
+  ref:
+    - refs/tags/v*
 
 volumes:
   - name: build-cache

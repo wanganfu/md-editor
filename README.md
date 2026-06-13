@@ -242,6 +242,16 @@ npm run tauri build
 
 ---
 
+## 赞赏支持
+
+如果这个项目对你有帮助，欢迎扫码支持 ☕
+
+| 微信支付 | 支付宝 |
+|--------|--------|
+| ![微信支付](payimg/wechat.png) | ![支付宝](payimg/alipay.png) |
+
+---
+
 ## 许可证
 
 本项目为私有项目（`package.json` 中 `"private": true`）。如需开源或添加许可证，请自行补充 LICENSE 文件。
