@@ -28,3 +28,6 @@ cp "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" "$NSIS_DIR/"
 ls -al "src-tauri/target/x86_64-pc-windows-msvc/release"
 ls -al "$NSIS_DIR"
 save_target_cache
+
+mv "$NSIS_DIR/MDEditor-${VERSION}-x64-setup.exe" "$NSIS_DIR/MDEditor-${VERSION}-windows-x64-setup.exe"
+mv "$NSIS_DIR/md-editor.exe" "$NSIS_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"    

@@ -28,3 +28,6 @@ ls dist/linux/*.deb dist/linux/*.rpm >/dev/null 2>&1 || {
 
 ls -al dist/linux
 save_target_cache
+
+mv dist/linux/*.deb "dist/linux/MDEditor-${VERSION}-linux-amd64.deb"
+mv dist/linux/*.rpm "dist/linux/MDEditor-${VERSION}-linux-amd64.rpm"
