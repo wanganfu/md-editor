@@ -1,0 +1,95 @@
+kind: pipeline
+type: docker
+name: build-release
+
+platform:
+  os: linux
+  arch: amd64
+
+node:
+  runner: localagent
+
+trigger:
+  branch:
+    - master
+  event:
+    - push
+
+volumes:
+  - name: build-cache
+    host:
+      path: /var/lib/drone/cache/md-editor
+
+steps:
+  - name: build-windows
+    image: &build_image docker.1ms.run/library/node:20-bookworm
+    volumes: &build_volumes
+      - name: build-cache
+        path: /cache
+    environment: &build_env
+      CI: "true"
+      CARGO_HOME: /cache/cargo
+      RUSTUP_HOME: /cache/rustup
+      NPM_CONFIG_CACHE: /cache/npm
+      XDG_CACHE_HOME: /cache/xdg-cache
+      CARGO_INCREMENTAL: "0"
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+      CARGO_NET_RETRY: "5"
+      DEBIAN_FRONTEND: noninteractive
+    commands:
+      - bash ci/scripts/build-windows.sh
+
+  - name: build-linux
+    image: *build_image
+    volumes: *build_volumes
+    environment: *build_env
+    depends_on:
+      - build-windows
+    commands:
+      - bash ci/scripts/build-linux.sh
+
+  - name: upload-windows
+    image: &upload_image git.anfu.me/anfu/drone-upload:latest
+    pull: &upload_pull always
+    depends_on:
+      - build-windows
+    environment: &upload_env
+      DOWNLOAD_SITE_URL: https://app.anfu.me
+      PROJECT_SLUG: MD Editor
+      ARTIFACT_UPLOAD_ALL: "true"
+      DRONE_UPLOAD_TOKEN:
+        from_secret: download_site_upload_token
+      ARTIFACT_DIR: dist/windows
+
+  - name: upload-linux
+    image: *upload_image
+    pull: *upload_pull
+    depends_on:
+      - build-linux
+    environment:
+      <<: *upload_env
+      ARTIFACT_DIR: dist/linux
+
+  - name: notify-email
+    image: git.anfu.me/anfu/docker-email-notify:latest
+    pull: always
+    depends_on:
+      - upload-windows
+      - upload-linux
+    when:
+      status:
+        - success
+        - failure
+    environment:
+      EMAIL_HOST:
+        from_secret: email_host
+      EMAIL_PASS:
+        from_secret: email_pass
+      EMAIL_NAME:
+        from_secret: email_name
+      EMAIL_PORT:
+        from_secret: email_port
+      EMAIL_FROM:
+        from_secret: email_from
+      EMAIL_TO:
+        from_secret: email_to

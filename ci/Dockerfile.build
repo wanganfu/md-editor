@@ -1,0 +1,17 @@
+# 预装 Tauri 构建依赖，CI 中设置 SKIP_APT_INSTALL=1 跳过 apt 步骤
+#
+# 构建：docker build -f ci/Dockerfile.build -t git.anfu.me/anfu/md-editor-build:bookworm .
+# 推送：docker push git.anfu.me/anfu/md-editor-build:bookworm
+FROM docker.1ms.run/library/node:20-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources \
+    && sed -i 's|security.debian.org/debian-security|mirrors.tuna.tsinghua.edu.cn/debian-security|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl ca-certificates pkg-config build-essential wget file libssl-dev \
+        nsis lld clang llvm \
+        libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf rpm \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm config set registry https://registry.npmmirror.com

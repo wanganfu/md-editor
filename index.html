@@ -18,10 +18,10 @@
           <button id="btn-open-folder" class="toolbar-btn" title="打开文件夹"><i class="fa-solid fa-folder-plus"></i></button>
           <button id="btn-settings" class="toolbar-btn" title="设置"><i class="fa-solid fa-gear"></i></button>
           <span class="w-px h-5 mx-1" style="background:var(--border-secondary)"></span>
-          <span class="flex items-center gap-1.5 px-1 select-none" id="logo-area">
-            <i class="fa-brands fa-markdown text-lg" style="color:var(--accent)"></i>
-            <span id="file-name" class="text-xs font-medium truncate max-w-[160px]" style="color:var(--text-body)">未命名</span>
-            <span id="modified-dot" class="w-2 h-2 rounded-full hidden shrink-0" style="background:#f59e0b"></span>
+          <span class="flex items-center gap-1.5 px-1 select-none min-w-0 max-w-[200px]" id="logo-area">
+            <i class="fa-brands fa-markdown text-lg shrink-0" style="color:var(--accent)"></i>
+            <span id="file-name" class="text-xs font-medium min-w-0 truncate" style="color:var(--text-body)" title="未命名">未命名</span>
+            <span id="file-status-dot" class="file-status-dot shrink-0" data-state="new" title="新建，未保存"></span>
           </span>
         </div>
 
@@ -81,14 +81,30 @@
     <div class="flex-1 flex overflow-hidden">
       <!-- Sidebar -->
       <aside id="sidebar" class="flex flex-col shrink-0 border-r overflow-hidden transition-all duration-200" style="width:0;min-width:0;background:var(--bg-sidebar);border-color:var(--border-primary)">
-        <div class="flex items-center justify-between px-3 py-1.5 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
-          <span class="text-xs font-medium" style="color:var(--text-secondary)">文件浏览器</span>
-          <button id="btn-refresh-folder" class="toolbar-btn text-xs" title="刷新"><i class="fa-solid fa-rotate"></i></button>
+        <div class="sidebar-header flex items-stretch shrink-0 border-b" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
+          <div class="sidebar-tabs flex flex-1 min-w-0">
+            <button type="button" id="sidebar-tab-files" class="sidebar-tab active" data-i18n-title="sidebar.tabFiles" title="文档列表"><span data-i18n="sidebar.tabFiles">文档</span></button>
+            <button type="button" id="sidebar-tab-toc" class="sidebar-tab" data-i18n-title="sidebar.tabToc" title="文档目录"><span data-i18n="sidebar.tabToc">目录</span></button>
+          </div>
+          <button type="button" id="btn-refresh-sidebar" class="sidebar-refresh-btn toolbar-btn text-xs shrink-0" title="刷新"><i class="fa-solid fa-rotate"></i></button>
         </div>
-        <div class="flex-1 overflow-y-auto p-1" id="sidebar-file-list">
-          <div class="flex flex-col items-center justify-center h-full gap-2" style="color:var(--text-secondary)" id="sidebar-empty">
-            <i class="fa-solid fa-folder-open text-2xl opacity-40"></i>
-            <span class="text-xs opacity-60">打开文件夹以浏览文件</span>
+        <div id="sidebar-content" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div id="sidebar-file-panel" class="sidebar-panel flex flex-col flex-1 min-h-0">
+            <div id="sidebar-siblings-wrap" class="sidebar-files-section flex flex-col min-h-0">
+              <div class="sidebar-section-label" data-i18n="settings.documentListSiblings">兄弟文档</div>
+              <div id="sidebar-siblings-list" class="sidebar-files-list flex-1 overflow-y-auto p-1 min-h-0"></div>
+            </div>
+            <div id="sidebar-files-splitter" class="sidebar-files-splitter hidden" aria-hidden="true"></div>
+            <div id="sidebar-history-wrap" class="sidebar-files-section flex flex-col min-h-0">
+              <div class="sidebar-section-label" data-i18n="settings.documentListHistory">历史文档</div>
+              <div id="sidebar-history-list" class="sidebar-files-list flex-1 overflow-y-auto p-1 min-h-0"></div>
+            </div>
+          </div>
+          <div class="sidebar-panel hidden flex flex-col flex-1 min-h-0 overflow-y-auto p-1" id="sidebar-toc-list">
+            <div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)" id="sidebar-toc-empty">
+              <i class="fa-solid fa-list-ul text-2xl opacity-40"></i>
+              <span class="text-xs opacity-60 text-center">当前文档没有标题</span>
+            </div>
           </div>
         </div>
         <div class="px-2 py-1 border-t text-[10px] shrink-0 truncate" style="background:var(--bg-pane-header);border-color:var(--border-primary);color:var(--text-secondary)" id="sidebar-folder-path"></div>
@@ -100,13 +116,14 @@
         <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all duration-300 opacity-0 translate-y-[-1rem] pointer-events-none" style="background:var(--accent);color:#fff"></div>
         <section id="editor-pane" class="flex-1 flex flex-col" style="border-color:var(--border-pane)">
           <div class="flex items-center justify-between px-3 py-1 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
-            <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)">Markdown</span>
+            <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)" data-i18n="pane.markdown">Markdown</span>
           </div>
           <textarea
             id="editor"
             class="flex-1 w-full p-4 resize-none outline-none font-mono text-sm leading-relaxed overflow-y-auto"
             style="background:var(--bg-editor);color:var(--text-editor)"
             placeholder="开始编写 Markdown..."
+            data-i18n-placeholder="editor.placeholder"
             spellcheck="false"
           ></textarea>
         </section>
@@ -118,7 +135,7 @@
 
         <section id="preview-pane" class="flex-1 flex flex-col">
           <div class="flex items-center justify-between px-3 py-1 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
-            <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)">Preview</span>
+            <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)" data-i18n="pane.preview">Preview</span>
           </div>
           <div id="preview" class="flex-1 overflow-y-auto p-6 md-preview" style="background:var(--bg-preview)"></div>
         </section>
@@ -145,16 +162,126 @@
       <div id="settings-backdrop" class="settings-backdrop"></div>
       <div class="settings-dialog" role="dialog" aria-labelledby="settings-title">
         <div class="settings-header">
-          <h2 id="settings-title" class="settings-title">设置</h2>
-          <button id="settings-close" class="toolbar-btn" title="关闭"><i class="fa-solid fa-xmark"></i></button>
+          <h2 id="settings-title" class="settings-title" data-i18n="settings.title">设置</h2>
+          <button id="settings-close" class="toolbar-btn" data-i18n-title="settings.close" title="关闭"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <div class="settings-body">
-          <section class="settings-section">
-            <h3 class="settings-section-title">文件关联</h3>
-            <p class="settings-desc">将 MD Editor 设为 Windows 上 <code>.md</code> / <code>.markdown</code> 文件的默认打开方式。双击文件即可直接打开。</p>
-            <p id="settings-default-status" class="settings-status">检测中...</p>
-            <button id="settings-btn-default-app" class="settings-action-btn">设为默认打开方式</button>
-          </section>
+        <div class="settings-layout">
+          <nav class="settings-nav" aria-label="Settings navigation">
+            <button type="button" class="settings-nav-item active" data-settings-panel="general">
+              <i class="fa-solid fa-sliders"></i>
+              <span data-i18n="settings.nav.general">常规</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-panel="appearance">
+              <i class="fa-solid fa-palette"></i>
+              <span data-i18n="settings.nav.appearance">外观</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-panel="system">
+              <i class="fa-solid fa-desktop"></i>
+              <span data-i18n="settings.nav.system">系统</span>
+            </button>
+          </nav>
+          <div class="settings-content">
+            <section id="settings-panel-general" class="settings-panel active">
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.defaultViewMode">默认打开查看方式</div>
+                <p class="settings-desc" data-i18n="settings.defaultViewMode.desc">新建或启动时默认使用的编辑区布局。</p>
+                <div class="settings-option-group" role="radiogroup" aria-label="Default view mode">
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-view-mode" value="preview" />
+                    <span data-i18n="settings.viewPreview">预览</span>
+                  </label>
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-view-mode" value="edit" />
+                    <span data-i18n="settings.viewEdit">编辑</span>
+                  </label>
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-view-mode" value="split" />
+                    <span data-i18n="settings.viewSplit">分屏</span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-field">
+                <label class="settings-checkbox">
+                  <input type="checkbox" id="setting-scroll-lock" />
+                  <span data-i18n="settings.defaultScrollLock">默认分屏滚动锁定</span>
+                </label>
+                <p class="settings-desc" data-i18n="settings.defaultScrollLock.desc">启动时是否在分屏模式下锁定编辑区与预览区的同步滚动。</p>
+              </div>
+              <div class="settings-field">
+                <label class="settings-checkbox">
+                  <input type="checkbox" id="setting-sidebar-visible" />
+                  <span data-i18n="settings.defaultSidebar">默认打开侧边栏</span>
+                </label>
+                <p class="settings-desc" data-i18n="settings.defaultSidebar.desc">启动时是否展开左侧文件与目录侧边栏。</p>
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.defaultSidebarTab">侧边栏默认显示栏目</div>
+                <p class="settings-desc" data-i18n="settings.defaultSidebarTab.desc">侧边栏展开时默认显示文档列表或文档目录。</p>
+                <div class="settings-option-group" role="radiogroup" aria-label="Default sidebar tab">
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-sidebar-tab" value="files" />
+                    <span data-i18n="sidebar.tabFiles">文档</span>
+                  </label>
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-sidebar-tab" value="toc" />
+                    <span data-i18n="sidebar.tabToc">目录</span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.documentListMode">文档栏显示内容</div>
+                <p class="settings-desc" data-i18n="settings.documentListMode.desc">可同时选择多种文档列表；不选则隐藏文档栏，仅显示目录。</p>
+                <div class="settings-checkbox-group">
+                  <label class="settings-checkbox">
+                    <input type="checkbox" id="setting-show-siblings" />
+                    <span data-i18n="settings.documentListSiblings">兄弟文档</span>
+                  </label>
+                  <label class="settings-checkbox">
+                    <input type="checkbox" id="setting-show-history" />
+                    <span data-i18n="settings.documentListHistory">历史文档</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+            <section id="settings-panel-appearance" class="settings-panel hidden">
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.language">语言</div>
+                <p class="settings-desc" data-i18n="settings.language.desc">选择界面显示语言。</p>
+                <div class="settings-option-group" role="radiogroup" aria-label="Language">
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-language" value="zh" />
+                    <span data-i18n="settings.langZh">中文</span>
+                  </label>
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-language" value="en" />
+                    <span data-i18n="settings.langEn">English</span>
+                  </label>
+                </div>
+              </div>
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.theme">默认主题</div>
+                <p class="settings-desc" data-i18n="settings.theme.desc">选择应用界面的默认配色。</p>
+                <div class="settings-option-group" role="radiogroup" aria-label="Theme">
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-theme" value="light" />
+                    <span data-i18n="settings.themeLight">白色</span>
+                  </label>
+                  <label class="settings-radio">
+                    <input type="radio" name="setting-theme" value="dark" />
+                    <span data-i18n="settings.themeDark">黑色</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+            <section id="settings-panel-system" class="settings-panel hidden">
+              <div class="settings-field">
+                <div class="settings-field-label" data-i18n="settings.fileAssoc">文件关联</div>
+                <p class="settings-desc" data-i18n="settings.fileAssoc.desc">将 MD Editor 设为 Windows 上 .md / .markdown 文件的默认打开方式。双击文件即可直接打开。</p>
+                <p id="settings-default-status" class="settings-status" data-i18n="settings.fileAssoc.checking">检测中...</p>
+                <button id="settings-btn-default-app" class="settings-action-btn" data-i18n="settings.fileAssoc.register">设为默认打开方式</button>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </div>

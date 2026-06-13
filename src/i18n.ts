@@ -1,0 +1,245 @@
+export type Language = "zh" | "en";
+
+const messages: Record<Language, Record<string, string>> = {
+  zh: {
+    "app.title": "MD Editor",
+    "toolbar.sidebar": "侧边栏",
+    "toolbar.openFolder": "打开文件夹",
+    "toolbar.settings": "设置",
+    "toolbar.bold": "粗体 (Ctrl+B)",
+    "toolbar.italic": "斜体 (Ctrl+I)",
+    "toolbar.strikethrough": "删除线",
+    "toolbar.heading1": "标题 1",
+    "toolbar.heading2": "标题 2",
+    "toolbar.heading3": "标题 3",
+    "toolbar.ul": "无序列表",
+    "toolbar.ol": "有序列表",
+    "toolbar.task": "任务列表",
+    "toolbar.quote": "引用",
+    "toolbar.code": "行内代码",
+    "toolbar.codeblock": "代码块",
+    "toolbar.link": "链接",
+    "toolbar.image": "图片",
+    "toolbar.hr": "分割线",
+    "toolbar.table": "表格",
+    "toolbar.new": "新建 (Ctrl+N)",
+    "toolbar.open": "打开 (Ctrl+O)",
+    "toolbar.save": "保存 (Ctrl+S)",
+    "toolbar.saveAs": "另存为",
+    "toolbar.viewEdit": "仅编辑",
+    "toolbar.viewSplit": "分屏",
+    "toolbar.viewPreview": "仅预览",
+    "toolbar.scrollLock": "锁定同步滚动（分屏）",
+    "toolbar.scrollUnlock": "取消同步滚动（分屏）",
+    "toolbar.themeDark": "切换为浅色",
+    "toolbar.themeLight": "切换为深色",
+    "sidebar.tabFiles": "文档",
+    "sidebar.tabToc": "目录",
+    "sidebar.refresh": "刷新",
+    "sidebar.openFolderHint": "打开文件夹以浏览文件",
+    "sidebar.noMarkdown": "没有找到 Markdown 文件",
+    "sidebar.noHistory": "暂无打开记录",
+    "sidebar.recentFiles": "最近打开",
+    "sidebar.removeHistoryItem": "从历史记录中移除",
+    "sidebar.noHeadings": "当前文档没有标题",
+    "pane.markdown": "Markdown",
+    "pane.preview": "Preview",
+    "status.words": "词",
+    "status.chars": "字符",
+    "status.lines": "行",
+    "status.cursor": "行 {line}, 列 {col}",
+    "status.unnamed": "未命名",
+    "fileStatus.saved": "已保存",
+    "fileStatus.modified": "已修改，未保存",
+    "fileStatus.new": "新建，未保存",
+    "toast.scrollLocked": "已锁定同步滚动",
+    "toast.scrollUnlocked": "已取消同步滚动",
+    "toast.saved": "已保存",
+    "toast.savedAs": "已另存为",
+    "toast.defaultApp": "已设为 Markdown 默认打开方式",
+    "toast.settingsSaved": "设置已保存",
+    "settings.title": "设置",
+    "settings.close": "关闭",
+    "settings.nav.general": "常规",
+    "settings.nav.appearance": "外观",
+    "settings.nav.system": "系统",
+    "settings.defaultViewMode": "默认打开查看方式",
+    "settings.defaultViewMode.desc": "新建或启动时默认使用的编辑区布局。",
+    "settings.viewEdit": "编辑",
+    "settings.viewSplit": "分屏",
+    "settings.viewPreview": "预览",
+    "settings.defaultScrollLock": "默认分屏滚动锁定",
+    "settings.defaultScrollLock.desc": "启动时是否在分屏模式下锁定编辑区与预览区的同步滚动。",
+    "settings.defaultSidebar": "默认打开侧边栏",
+    "settings.defaultSidebar.desc": "启动时是否展开左侧文件与目录侧边栏。",
+    "settings.defaultSidebarTab": "侧边栏默认显示栏目",
+    "settings.defaultSidebarTab.desc": "侧边栏展开时默认显示文档列表或文档目录。",
+    "settings.documentListMode": "文档栏显示内容",
+    "settings.documentListMode.desc": "可同时选择多种文档列表；不选则隐藏文档栏，仅显示目录。",
+    "settings.documentListSiblings": "兄弟文档",
+    "settings.documentListHistory": "历史文档",
+    "settings.language": "语言",
+    "settings.language.desc": "选择界面显示语言。",
+    "settings.langZh": "中文",
+    "settings.langEn": "English",
+    "settings.theme": "默认主题",
+    "settings.theme.desc": "选择应用界面的默认配色。",
+    "settings.themeLight": "白色",
+    "settings.themeDark": "黑色",
+    "settings.fileAssoc": "文件关联",
+    "settings.fileAssoc.desc":
+      "将 MD Editor 设为 Windows 上 .md / .markdown 文件的默认打开方式。双击文件即可直接打开。",
+    "settings.fileAssoc.checking": "检测中...",
+    "settings.fileAssoc.isDefault": "当前已是 Markdown 默认打开方式",
+    "settings.fileAssoc.notDefault": "尚未设为 Markdown 默认打开方式",
+    "settings.fileAssoc.windowsOnly": "此功能仅支持 Windows",
+    "settings.fileAssoc.register": "设为默认打开方式",
+    "settings.fileAssoc.reRegister": "重新注册默认打开方式",
+    "dialog.openFolder": "选择文件夹",
+    "dialog.openFile": "打开 Markdown 文件",
+    "dialog.saveAs": "另存为 Markdown",
+    "editor.placeholder": "开始编写 Markdown...",
+  },
+  en: {
+    "app.title": "MD Editor",
+    "toolbar.sidebar": "Sidebar",
+    "toolbar.openFolder": "Open folder",
+    "toolbar.settings": "Settings",
+    "toolbar.bold": "Bold (Ctrl+B)",
+    "toolbar.italic": "Italic (Ctrl+I)",
+    "toolbar.strikethrough": "Strikethrough",
+    "toolbar.heading1": "Heading 1",
+    "toolbar.heading2": "Heading 2",
+    "toolbar.heading3": "Heading 3",
+    "toolbar.ul": "Bullet list",
+    "toolbar.ol": "Numbered list",
+    "toolbar.task": "Task list",
+    "toolbar.quote": "Quote",
+    "toolbar.code": "Inline code",
+    "toolbar.codeblock": "Code block",
+    "toolbar.link": "Link",
+    "toolbar.image": "Image",
+    "toolbar.hr": "Horizontal rule",
+    "toolbar.table": "Table",
+    "toolbar.new": "New (Ctrl+N)",
+    "toolbar.open": "Open (Ctrl+O)",
+    "toolbar.save": "Save (Ctrl+S)",
+    "toolbar.saveAs": "Save as",
+    "toolbar.viewEdit": "Edit only",
+    "toolbar.viewSplit": "Split view",
+    "toolbar.viewPreview": "Preview only",
+    "toolbar.scrollLock": "Lock scroll sync (split)",
+    "toolbar.scrollUnlock": "Unlock scroll sync (split)",
+    "toolbar.themeDark": "Switch to light theme",
+    "toolbar.themeLight": "Switch to dark theme",
+    "sidebar.tabFiles": "Files",
+    "sidebar.tabToc": "Outline",
+    "sidebar.refresh": "Refresh",
+    "sidebar.openFolderHint": "Open a folder to browse files",
+    "sidebar.noMarkdown": "No Markdown files found",
+    "sidebar.noHistory": "No recent files",
+    "sidebar.recentFiles": "Recent files",
+    "sidebar.removeHistoryItem": "Remove from history",
+    "sidebar.noHeadings": "No headings in this document",
+    "pane.markdown": "Markdown",
+    "pane.preview": "Preview",
+    "status.words": "words",
+    "status.chars": "chars",
+    "status.lines": "lines",
+    "status.cursor": "Ln {line}, Col {col}",
+    "status.unnamed": "Untitled",
+    "fileStatus.saved": "Saved",
+    "fileStatus.modified": "Modified, not saved",
+    "fileStatus.new": "New, not saved",
+    "toast.scrollLocked": "Scroll sync locked",
+    "toast.scrollUnlocked": "Scroll sync unlocked",
+    "toast.saved": "Saved",
+    "toast.savedAs": "Saved as",
+    "toast.defaultApp": "Set as default Markdown handler",
+    "toast.settingsSaved": "Settings saved",
+    "settings.title": "Settings",
+    "settings.close": "Close",
+    "settings.nav.general": "General",
+    "settings.nav.appearance": "Appearance",
+    "settings.nav.system": "System",
+    "settings.defaultViewMode": "Default view mode",
+    "settings.defaultViewMode.desc": "Layout used when the app starts or a new session begins.",
+    "settings.viewEdit": "Edit",
+    "settings.viewSplit": "Split",
+    "settings.viewPreview": "Preview",
+    "settings.defaultScrollLock": "Default split scroll lock",
+    "settings.defaultScrollLock.desc":
+      "Lock editor and preview scroll sync in split view on startup.",
+    "settings.defaultSidebar": "Open sidebar by default",
+    "settings.defaultSidebar.desc": "Show the left sidebar when the app starts.",
+    "settings.defaultSidebarTab": "Default sidebar panel",
+    "settings.defaultSidebarTab.desc": "Show the file list or document outline when the sidebar opens.",
+    "settings.documentListMode": "Document list content",
+    "settings.documentListMode.desc": "Select one or more lists. If none are selected, the document panel is hidden.",
+    "settings.documentListSiblings": "Sibling files",
+    "settings.documentListHistory": "Recent files",
+    "settings.language": "Language",
+    "settings.language.desc": "Choose the interface language.",
+    "settings.langZh": "中文",
+    "settings.langEn": "English",
+    "settings.theme": "Default theme",
+    "settings.theme.desc": "Choose the default color scheme.",
+    "settings.themeLight": "Light",
+    "settings.themeDark": "Dark",
+    "settings.fileAssoc": "File association",
+    "settings.fileAssoc.desc":
+      "Register MD Editor as the default handler for .md and .markdown files on Windows.",
+    "settings.fileAssoc.checking": "Checking...",
+    "settings.fileAssoc.isDefault": "Already the default Markdown handler",
+    "settings.fileAssoc.notDefault": "Not the default Markdown handler yet",
+    "settings.fileAssoc.windowsOnly": "Available on Windows only",
+    "settings.fileAssoc.register": "Set as default handler",
+    "settings.fileAssoc.reRegister": "Re-register default handler",
+    "dialog.openFolder": "Select folder",
+    "dialog.openFile": "Open Markdown file",
+    "dialog.saveAs": "Save as Markdown",
+    "editor.placeholder": "Start writing Markdown...",
+  },
+};
+
+let currentLanguage: Language = "zh";
+
+export function getLanguage(): Language {
+  return currentLanguage;
+}
+
+export function setLanguage(lang: Language): void {
+  currentLanguage = lang;
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+}
+
+export function t(key: string, params?: Record<string, string | number>): string {
+  const table = messages[currentLanguage];
+  let text = table[key] ?? messages.zh[key] ?? key;
+  if (params) {
+    for (const [name, value] of Object.entries(params)) {
+      text = text.replace(`{${name}}`, String(value));
+    }
+  }
+  return text;
+}
+
+export function applyI18nToDom(): void {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (!key) return;
+    el.textContent = t(key);
+  });
+
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-title");
+    if (!key) return;
+    el.setAttribute("title", t(key));
+  });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-placeholder");
+    if (!key) return;
+    el.setAttribute("placeholder", t(key));
+  });
+}

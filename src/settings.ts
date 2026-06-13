@@ -1,0 +1,122 @@
+import { invoke } from "@tauri-apps/api/core";
+import type { Language } from "./i18n";
+
+export type ViewMode = "edit" | "split" | "preview";
+export type ThemeMode = "light" | "dark";
+export type SidebarTab = "files" | "toc";
+
+export interface AppSettings {
+  defaultViewMode: ViewMode;
+  defaultScrollSyncLocked: boolean;
+  defaultSidebarVisible: boolean;
+  defaultSidebarTab: SidebarTab;
+  showSiblingDocuments: boolean;
+  showHistoryDocuments: boolean;
+  documentListSplitRatio: number;
+  language: Language;
+  theme: ThemeMode;
+}
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  defaultViewMode: "split",
+  defaultScrollSyncLocked: false,
+  defaultSidebarVisible: false,
+  defaultSidebarTab: "files",
+  showSiblingDocuments: true,
+  showHistoryDocuments: false,
+  documentListSplitRatio: 0.5,
+  language: "zh",
+  theme: "light",
+};
+
+type LegacyAppSettings = Partial<AppSettings> & {
+  documentListMode?: string;
+};
+
+function isViewMode(value: string): value is ViewMode {
+  return value === "edit" || value === "split" || value === "preview";
+}
+
+function isLanguage(value: string): value is Language {
+  return value === "zh" || value === "en";
+}
+
+function isTheme(value: string): value is ThemeMode {
+  return value === "light" || value === "dark";
+}
+
+function isSidebarTab(value: string): value is SidebarTab {
+  return value === "files" || value === "toc";
+}
+
+function clampSplitRatio(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_SETTINGS.documentListSplitRatio;
+  return Math.max(0.2, Math.min(0.8, value));
+}
+
+function resolveDocumentListFlags(raw: LegacyAppSettings): {
+  showSiblingDocuments: boolean;
+  showHistoryDocuments: boolean;
+} {
+  if (
+    raw.showSiblingDocuments !== undefined ||
+    raw.showHistoryDocuments !== undefined
+  ) {
+    return {
+      showSiblingDocuments:
+        raw.showSiblingDocuments ?? DEFAULT_SETTINGS.showSiblingDocuments,
+      showHistoryDocuments:
+        raw.showHistoryDocuments ?? DEFAULT_SETTINGS.showHistoryDocuments,
+    };
+  }
+
+  if (raw.documentListMode === "history") {
+    return { showSiblingDocuments: false, showHistoryDocuments: true };
+  }
+
+  return {
+    showSiblingDocuments: true,
+    showHistoryDocuments: false,
+  };
+}
+
+function normalizeSettings(raw: LegacyAppSettings): AppSettings {
+  const documentFlags = resolveDocumentListFlags(raw);
+
+  return {
+    defaultViewMode: isViewMode(raw.defaultViewMode ?? "")
+      ? raw.defaultViewMode!
+      : DEFAULT_SETTINGS.defaultViewMode,
+    defaultScrollSyncLocked:
+      raw.defaultScrollSyncLocked ?? DEFAULT_SETTINGS.defaultScrollSyncLocked,
+    defaultSidebarVisible:
+      raw.defaultSidebarVisible ?? DEFAULT_SETTINGS.defaultSidebarVisible,
+    defaultSidebarTab: isSidebarTab(raw.defaultSidebarTab ?? "")
+      ? raw.defaultSidebarTab!
+      : DEFAULT_SETTINGS.defaultSidebarTab,
+    showSiblingDocuments: documentFlags.showSiblingDocuments,
+    showHistoryDocuments: documentFlags.showHistoryDocuments,
+    documentListSplitRatio: clampSplitRatio(
+      raw.documentListSplitRatio ?? DEFAULT_SETTINGS.documentListSplitRatio
+    ),
+    language: isLanguage(raw.language ?? "")
+      ? raw.language!
+      : DEFAULT_SETTINGS.language,
+    theme: isTheme(raw.theme ?? "") ? raw.theme! : DEFAULT_SETTINGS.theme,
+  };
+}
+
+export async function loadAppSettings(): Promise<AppSettings> {
+  try {
+    const raw = await invoke<LegacyAppSettings>("get_app_settings");
+    return normalizeSettings(raw);
+  } catch (e) {
+    console.error("加载设置失败:", e);
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+export async function saveAppSettings(settings: AppSettings): Promise<void> {
+  const normalized = normalizeSettings(settings);
+  await invoke("save_app_settings", { settings: normalized });
+}
