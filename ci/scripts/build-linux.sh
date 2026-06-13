@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 source "$SCRIPT_DIR/common.sh"
 
+read_app_version
 setup_build_env
 ensure_apt_packages \
   curl ca-certificates pkg-config build-essential wget file libssl-dev \

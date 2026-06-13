@@ -77,3 +77,8 @@ print_tool_versions() {
   npm --version
   rustc --version
 }
+
+read_app_version() {
+  VERSION="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+  export VERSION
+}
