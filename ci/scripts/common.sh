@@ -44,13 +44,28 @@ ensure_apt_packages() {
 }
 
 ensure_rust() {
-  if command -v rustc >/dev/null 2>&1; then
-    return 0
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    unset RUSTUP_DIST_SERVER RUSTUP_UPDATE_ROOT
+  else
+    export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
+    export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
   fi
-  export RUSTUP_DIST_SERVER="${RUSTUP_DIST_SERVER:-https://mirrors.ustc.edu.cn/rust-static}"
-  export RUSTUP_UPDATE_ROOT="${RUSTUP_UPDATE_ROOT:-https://mirrors.ustc.edu.cn/rust-static/rustup}"
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-  export PATH="$CACHE_ROOT/cargo/bin:$PATH"
+
+  if ! command -v rustup >/dev/null 2>&1; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+    export PATH="$CACHE_ROOT/cargo/bin:$PATH"
+  fi
+
+  # 缓存目录里的 RUSTUP_HOME 可能为空，但 PATH 上仍有 runner 自带的 rustc，不能只靠 command -v rustc 判断
+  if ! rustup show active-toolchain >/dev/null 2>&1; then
+    rustup default stable
+  fi
+
+  if ! rustc --version >/dev/null 2>&1; then
+    echo "ERROR: Rust toolchain unavailable after ensure_rust"
+    rustup show
+    exit 1
+  fi
 }
 
 setup_rust_cargo_npm_mirrors() {
