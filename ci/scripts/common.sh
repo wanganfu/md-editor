@@ -92,3 +92,10 @@ clean_linux_bundle_output() {
   rm -rf src-tauri/target/release/bundle/deb
   rm -rf src-tauri/target/release/bundle/rpm
 }
+
+clean_macos_bundle_output() {
+  rm -rf src-tauri/target/universal-apple-darwin/release/bundle/dmg
+  rm -rf src-tauri/target/release/bundle/dmg
+  rm -rf src-tauri/target/aarch64-apple-darwin/release/bundle/dmg
+  rm -rf src-tauri/target/x86_64-apple-darwin/release/bundle/dmg
+}

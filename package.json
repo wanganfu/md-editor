@@ -15,7 +15,7 @@
     "tauri:build:mac": "tauri build",
     "tauri:build:mac:arm": "tauri build --target aarch64-apple-darwin --bundles dmg",
     "tauri:build:mac:intel": "tauri build --target x86_64-apple-darwin --bundles dmg",
-    "tauri:build:mac:universal": "tauri build --target universal-apple-darwin"
+    "tauri:build:mac:universal": "tauri build --target universal-apple-darwin --bundles dmg"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",
