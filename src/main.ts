@@ -3,20 +3,50 @@ import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
+import {
+  applyI18nToDom,
+  getLanguage,
+  setLanguage,
+  t,
+  type Language,
+} from "./i18n";
+import {
+  loadAppSettings,
+  saveAppSettings,
+  type AppSettings,
+  type ViewMode,
+  type SidebarTab,
+} from "./settings";
+import {
+  addToDocumentHistory,
+  loadDocumentHistory,
+  removeFromDocumentHistoryList,
+  saveDocumentHistory,
+} from "./documentHistory";
 
 // ── State ──────────────────────────────────────────────
 let currentFilePath: string | null = null;
 let currentFolderPath: string | null = null;
 let isModified = false;
-type ViewMode = "edit" | "split" | "preview";
 let isDark = false;
 let sidebarVisible = false;
-type SidebarTab = "files" | "toc";
 let sidebarTab: SidebarTab = "files";
 let currentViewMode: ViewMode = "split";
 let scrollSyncLocked = false;
 let activeTocId: string | null = null;
 let tocHighlightRaf: number | null = null;
+let documentHistory: string[] = [];
+let appSettings: AppSettings = {
+  defaultViewMode: "split",
+  defaultScrollSyncLocked: false,
+  defaultSidebarVisible: false,
+  defaultSidebarTab: "files",
+  showSiblingDocuments: true,
+  showHistoryDocuments: false,
+  documentListSplitRatio: 0.5,
+  language: "zh",
+  theme: "light",
+};
 
 // ── DOM refs ──────────────────────────────────────────
 const $ = <T extends HTMLElement>(sel: string) =>
@@ -158,12 +188,72 @@ function addHeadingIds(html: string): string {
   });
 }
 
-function renderFileListEmpty(message: string) {
-  const list = $("#sidebar-file-list");
+function renderFileListEmpty(list: HTMLElement, message: string, icon = "fa-folder-open") {
   list.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)">
-    <i class="fa-solid fa-folder-open text-2xl opacity-40"></i>
+    <i class="fa-solid ${icon} text-2xl opacity-40"></i>
     <span class="text-xs opacity-60 text-center">${message}</span>
   </div>`;
+}
+
+function isDocumentsPanelEnabled(): boolean {
+  return appSettings.showSiblingDocuments || appSettings.showHistoryDocuments;
+}
+
+function applyDocumentListSplitRatio(ratio: number) {
+  const clamped = Math.max(0.2, Math.min(0.8, ratio));
+  appSettings = { ...appSettings, documentListSplitRatio: clamped };
+
+  const siblingsWrap = $("#sidebar-siblings-wrap");
+  const historyWrap = $("#sidebar-history-wrap");
+  const topPct = clamped * 100;
+  const bottomPct = 100 - topPct;
+
+  siblingsWrap.style.flex = `0 0 ${topPct}%`;
+  historyWrap.style.flex = `1 1 ${bottomPct}%`;
+}
+
+function applyDocumentListSectionsLayout() {
+  const showSiblings = appSettings.showSiblingDocuments;
+  const showHistory = appSettings.showHistoryDocuments;
+  const both = showSiblings && showHistory;
+
+  $("#sidebar-siblings-wrap").classList.toggle("hidden", !showSiblings);
+  $("#sidebar-history-wrap").classList.toggle("hidden", !showHistory);
+
+  const splitter = $("#sidebar-files-splitter");
+  splitter.classList.toggle("hidden", !both);
+  splitter.setAttribute("aria-hidden", both ? "false" : "true");
+
+  if (both) {
+    applyDocumentListSplitRatio(appSettings.documentListSplitRatio);
+  } else {
+    $("#sidebar-siblings-wrap").style.flex = "1 1 100%";
+    $("#sidebar-history-wrap").style.flex = "1 1 100%";
+  }
+}
+
+function updateSidebarDocumentsVisibility() {
+  const showDocs = isDocumentsPanelEnabled();
+  const filesTab = $("#sidebar-tab-files");
+  const tabs = $(".sidebar-tabs");
+
+  filesTab.classList.toggle("hidden", !showDocs);
+  tabs.classList.toggle("sidebar-tabs-single", !showDocs);
+
+  if (!showDocs) {
+    $("#sidebar-file-panel").classList.add("hidden");
+    $("#sidebar-toc-list").classList.remove("hidden");
+    return;
+  }
+
+  tabs.classList.remove("sidebar-tabs-single");
+  applyDocumentListSectionsLayout();
+}
+
+function resolveSidebarTab(tab: SidebarTab): SidebarTab {
+  if (!isDocumentsPanelEnabled()) return "toc";
+  if (tab === "files") return "files";
+  return "toc";
 }
 
 function renderTocList() {
@@ -174,7 +264,7 @@ function renderTocList() {
     activeTocId = null;
     list.innerHTML = `<div class="flex flex-col items-center justify-center h-full gap-2 px-3" style="color:var(--text-secondary)">
       <i class="fa-solid fa-list-ul text-2xl opacity-40"></i>
-      <span class="text-xs opacity-60 text-center">当前文档没有标题</span>
+      <span class="text-xs opacity-60 text-center">${t("sidebar.noHeadings")}</span>
     </div>`;
     return;
   }
@@ -281,11 +371,19 @@ function scheduleTocHighlightUpdate() {
 }
 
 function setSidebarTab(tab: SidebarTab) {
+  tab = resolveSidebarTab(tab);
   sidebarTab = tab;
+
   $("#sidebar-tab-files").classList.toggle("active", tab === "files");
   $("#sidebar-tab-toc").classList.toggle("active", tab === "toc");
-  $("#sidebar-file-list").classList.toggle("hidden", tab !== "files");
-  $("#sidebar-toc-list").classList.toggle("hidden", tab !== "toc");
+
+  if (isDocumentsPanelEnabled()) {
+    $("#sidebar-file-panel").classList.toggle("hidden", tab !== "files");
+    $("#sidebar-toc-list").classList.toggle("hidden", tab !== "toc");
+  } else {
+    $("#sidebar-file-panel").classList.add("hidden");
+    $("#sidebar-toc-list").classList.remove("hidden");
+  }
 
   if (tab === "files") {
     void refreshFileList();
@@ -375,16 +473,16 @@ function updateStatus() {
   const chars = text.length;
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   const lines = text.split(/\n/).length;
-  statusWords.textContent = `${words} 词`;
-  statusChars.textContent = `${chars} 字符`;
-  statusLines.textContent = `${lines} 行`;
+  statusWords.textContent = `${words} ${t("status.words")}`;
+  statusChars.textContent = `${chars} ${t("status.chars")}`;
+  statusLines.textContent = `${lines} ${t("status.lines")}`;
 
   const cursorPos = editor.selectionStart;
   const textBefore = text.substring(0, cursorPos);
   const line = textBefore.split("\n").length;
   const lastNewline = textBefore.lastIndexOf("\n");
   const col = cursorPos - lastNewline;
-  statusCursor.textContent = `行 ${line}, 列 ${col}`;
+  statusCursor.textContent = t("status.cursor", { line, col });
 }
 
 // ── Title update ───────────────────────────────────────
@@ -405,19 +503,19 @@ function getToolbarDocumentTitle(): string {
   if (headingTitle) return headingTitle;
 
   if (currentFilePath) {
-    return currentFilePath.split(/[/\\]/).pop() || "未命名";
+    return currentFilePath.split(/[/\\]/).pop() || t("status.unnamed");
   }
 
-  return "未命名";
+  return t("status.unnamed");
 }
 
 type FileSaveState = "saved" | "modified" | "new";
 
-const FILE_STATUS_LABELS: Record<FileSaveState, string> = {
-  saved: "已保存",
-  modified: "已修改，未保存",
-  new: "新建，未保存",
-};
+function getFileStatusLabel(state: FileSaveState): string {
+  if (state === "saved") return t("fileStatus.saved");
+  if (state === "modified") return t("fileStatus.modified");
+  return t("fileStatus.new");
+}
 
 function getFileSaveState(): FileSaveState {
   if (!currentFilePath) return "new";
@@ -434,14 +532,14 @@ function updateToolbarDocumentTitle() {
   const state = getFileSaveState();
   const dot = $("#file-status-dot");
   dot.dataset.state = state;
-  dot.title = FILE_STATUS_LABELS[state];
+  dot.title = getFileStatusLabel(state);
 }
 
 function getWindowTitle(): string {
   const fileLabel = currentFilePath
-    ? currentFilePath.split(/[/\\]/).pop() || "未命名"
-    : "未命名";
-  return (isModified ? "* " : "") + fileLabel + " - MD Editor";
+    ? currentFilePath.split(/[/\\]/).pop() || t("status.unnamed")
+    : t("status.unnamed");
+  return (isModified ? "* " : "") + fileLabel + " - " + t("app.title");
 }
 
 function updateTitle() {
@@ -555,7 +653,7 @@ async function openFolder() {
     const folderPath = await open({
       directory: true,
       multiple: false,
-      title: "选择文件夹",
+      title: t("dialog.openFolder"),
     });
     if (folderPath && typeof folderPath === "string") {
       currentFolderPath = folderPath;
@@ -566,48 +664,160 @@ async function openFolder() {
   }
 }
 
-async function refreshFileList() {
-  const list = $("#sidebar-file-list");
-  const folderLabel = $("#sidebar-folder-path");
+function getParentDir(filePath: string): string {
+  return filePath.replace(/[/\\][^/\\]+$/, "");
+}
 
-  if (!currentFolderPath) {
-    folderLabel.textContent = "";
-    renderFileListEmpty("打开文件夹以浏览文件");
+async function recordDocumentHistory(path: string) {
+  const next = addToDocumentHistory(documentHistory, path);
+  if (next.length === documentHistory.length && next[0] === documentHistory[0]) {
+    return;
+  }
+  documentHistory = next;
+  try {
+    await saveDocumentHistory(documentHistory);
+  } catch (e) {
+    console.error("保存文档历史失败:", e);
+  }
+}
+
+async function removeDocumentHistoryItem(path: string) {
+  documentHistory = removeFromDocumentHistoryList(documentHistory, path);
+  try {
+    await saveDocumentHistory(documentHistory);
+  } catch (e) {
+    console.error("保存文档历史失败:", e);
+  }
+}
+
+function renderSidebarFilesInto(
+  list: HTMLElement,
+  files: string[],
+  isHistory: boolean
+) {
+  if (files.length === 0) {
+    const message = isHistory
+      ? t("sidebar.noHistory")
+      : currentFilePath
+        ? t("sidebar.noMarkdown")
+        : t("sidebar.openFolderHint");
+    const icon = isHistory ? "fa-clock-rotate-left" : "fa-folder-open";
+    renderFileListEmpty(list, message, icon);
     return;
   }
 
-  try {
-    const files: string[] = await invoke("list_md_files", {
-      dir: currentFolderPath,
-    });
-    folderLabel.textContent =
-      currentFolderPath.split(/[/\\]/).pop() || currentFolderPath;
+  list.innerHTML = files
+    .map((f) => {
+      const name = f.split(/[/\\]/).pop() || f;
+      const safePath = f.replace(/"/g, "&quot;");
+      const isActive = f === currentFilePath;
+      const historyClass = isHistory ? " sidebar-file-history" : "";
+      const removeBtn = isHistory
+        ? `<button type="button" class="sidebar-file-remove" title="${t("sidebar.removeHistoryItem")}" aria-label="${t("sidebar.removeHistoryItem")}"><i class="fa-solid fa-xmark"></i></button>`
+        : "";
 
-    if (files.length === 0) {
-      list.innerHTML =
-        '<div class="px-3 py-4 text-xs" style="color:var(--text-secondary)">没有找到 Markdown 文件</div>';
-      return;
-    }
-
-    list.innerHTML = files
-      .map((f) => {
-        const name = f.split(/[/\\]/).pop() || f;
-        const isActive = f === currentFilePath;
-        return `<div class="sidebar-file ${isActive ? "active" : ""}" data-path="${f.replace(/"/g, "&quot;")}" title="${f.replace(/"/g, "&quot;")}">
-          <i class="fa-solid fa-file-lines shrink-0"></i><span class="truncate">${name}</span>
+      return `<div class="sidebar-file${historyClass}${isActive ? " active" : ""}" data-path="${safePath}" title="${safePath}">
+          <i class="fa-solid fa-file-lines shrink-0"></i><span class="truncate">${escapeHtml(name)}</span>${removeBtn}
         </div>`;
-      })
-      .join("");
+    })
+    .join("");
 
-    list.querySelectorAll(".sidebar-file").forEach((item) => {
-      item.addEventListener("click", async () => {
-        const path = (item as HTMLElement).dataset.path!;
-        await openFileByPath(path);
+  list.querySelectorAll(".sidebar-file").forEach((item) => {
+    item.addEventListener("click", async (e) => {
+      if ((e.target as HTMLElement).closest(".sidebar-file-remove")) return;
+      const path = (item as HTMLElement).dataset.path!;
+      await openFileByPath(path);
+    });
+  });
+
+  if (isHistory) {
+    list.querySelectorAll(".sidebar-file-remove").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const path = (btn.closest(".sidebar-file") as HTMLElement).dataset.path!;
+        await removeDocumentHistoryItem(path);
+        await refreshFileList();
       });
     });
-  } catch (e) {
-    console.error("列出文件失败:", e);
   }
+}
+
+async function getSiblingDocumentPaths(): Promise<string[]> {
+  if (currentFilePath) {
+    const parentDir = getParentDir(currentFilePath);
+    try {
+      return await invoke<string[]>("list_md_files", { dir: parentDir });
+    } catch (e) {
+      console.error("列出兄弟文档失败:", e);
+      return [];
+    }
+  }
+
+  if (currentFolderPath) {
+    try {
+      return await invoke<string[]>("list_md_files", {
+        dir: currentFolderPath,
+      });
+    } catch (e) {
+      console.error("列出文件失败:", e);
+      return [];
+    }
+  }
+
+  return [];
+}
+
+function updateSidebarFolderLabel() {
+  const folderLabel = $("#sidebar-folder-path");
+  const parts: string[] = [];
+
+  if (appSettings.showSiblingDocuments) {
+    if (currentFilePath) {
+      const parentDir = getParentDir(currentFilePath);
+      parts.push(parentDir.split(/[/\\]/).pop() || parentDir);
+      folderLabel.title = parentDir;
+    } else if (currentFolderPath) {
+      parts.push(
+        currentFolderPath.split(/[/\\]/).pop() || currentFolderPath
+      );
+      folderLabel.title = currentFolderPath;
+    }
+  }
+
+  if (
+    appSettings.showHistoryDocuments &&
+    documentHistory.length > 0 &&
+    !parts.includes(t("sidebar.recentFiles"))
+  ) {
+    parts.push(t("sidebar.recentFiles"));
+  }
+
+  folderLabel.textContent = parts.join(" · ");
+  if (parts.length === 0) {
+    folderLabel.removeAttribute("title");
+  }
+}
+
+async function refreshFileList() {
+  if (!isDocumentsPanelEnabled()) {
+    updateSidebarFolderLabel();
+    return;
+  }
+
+  if (appSettings.showSiblingDocuments) {
+    const siblings = await getSiblingDocumentPaths();
+    renderSidebarFilesInto($("#sidebar-siblings-list"), siblings, false);
+  }
+
+  if (appSettings.showHistoryDocuments) {
+    renderSidebarFilesInto(
+      $("#sidebar-history-list"),
+      [...documentHistory],
+      true
+    );
+  }
+
+  updateSidebarFolderLabel();
 }
 
 async function openFileByPath(path: string) {
@@ -620,7 +830,8 @@ async function openFileByPath(path: string) {
     currentFilePath = path;
     markSaved();
     updatePreview();
-    refreshFileList(); // Update active state
+    await recordDocumentHistory(path);
+    await refreshFileList();
     return true;
   } catch (e) {
     alert(`打开文件失败: ${e}`);
@@ -648,10 +859,9 @@ async function openPathsFromSystem(paths: string[]): Promise<boolean> {
   const opened = await openFileByPath(filePath);
   if (!opened) return false;
 
-  const parent = filePath.replace(/[/\\][^/\\]+$/, "");
+  const parent = getParentDir(filePath);
   if (parent) {
     currentFolderPath = parent;
-    await refreshFileList();
   }
   return true;
 }
@@ -683,7 +893,7 @@ async function newFile() {
   currentFilePath = null;
   markSaved();
   updatePreview();
-  if (currentFolderPath) refreshFileList();
+  await refreshFileList();
 }
 
 async function openFile() {
@@ -725,8 +935,8 @@ async function saveFile() {
         content: editor.value,
       });
       markSaved();
-      showToast("已保存");
-      if (currentFolderPath) refreshFileList();
+      showToast(t("toast.saved"));
+      await refreshFileList();
     } catch (e) {
       alert(`保存失败: ${e}`);
     }
@@ -748,8 +958,9 @@ async function saveFileAs() {
       await invoke("write_file", { path, content: editor.value });
       currentFilePath = path;
       markSaved();
-      showToast("已另存为");
-      if (currentFolderPath) refreshFileList();
+      showToast(t("toast.savedAs"));
+      await recordDocumentHistory(path);
+      await refreshFileList();
     }
   } catch (e) {
     alert(`另存失败: ${e}`);
@@ -797,7 +1008,6 @@ function setViewMode(mode: ViewMode) {
         previewPane.style.flex = "1 1 50%";
       }
       btnSplit.classList.add("active");
-      scrollSyncLocked = true;
       break;
     case "preview":
       clearPaneFlex();
@@ -822,18 +1032,27 @@ function setViewMode(mode: ViewMode) {
   }
 }
 
-// ── Theme Toggle ───────────────────────────────────────
-function toggleTheme() {
-  isDark = !isDark;
+// ── Theme ──────────────────────────────────────────────
+function applyTheme(theme: "light" | "dark") {
+  isDark = theme === "dark";
   const html = document.documentElement;
   const icon = $("#btn-theme").querySelector("i")!;
   if (isDark) {
     html.classList.add("dark");
     icon.className = "fa-solid fa-sun";
+    $("#btn-theme").title = t("toolbar.themeDark");
   } else {
     html.classList.remove("dark");
     icon.className = "fa-solid fa-moon";
+    $("#btn-theme").title = t("toolbar.themeLight");
   }
+}
+
+function toggleTheme() {
+  const nextTheme = isDark ? "light" : "dark";
+  applyTheme(nextTheme);
+  appSettings = { ...appSettings, theme: nextTheme };
+  void saveAppSettings(appSettings);
 }
 
 // ── Toolbar Actions ────────────────────────────────────
@@ -1034,6 +1253,41 @@ function initSplitter() {
   });
 }
 
+let sidebarFilesSplitterDragging = false;
+
+function initSidebarFilesSplitter() {
+  const splitter = $("#sidebar-files-splitter");
+  const container = $("#sidebar-file-panel");
+
+  splitter.addEventListener("mousedown", (e) => {
+    if (splitter.classList.contains("hidden")) return;
+    e.preventDefault();
+    sidebarFilesSplitterDragging = true;
+    splitter.classList.add("is-dragging");
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!sidebarFilesSplitterDragging) return;
+    const rect = container.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const pct = Math.max(0.2, Math.min(0.8, y / rect.height));
+    applyDocumentListSplitRatio(pct);
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!sidebarFilesSplitterDragging) return;
+    sidebarFilesSplitterDragging = false;
+    splitter.classList.remove("is-dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    void persistSettings({
+      documentListSplitRatio: appSettings.documentListSplitRatio,
+    });
+  });
+}
+
 // ── External file drag & drop ───────────────────────────
 let externalDragActive = false;
 
@@ -1139,11 +1393,11 @@ function updateScrollLockButton() {
 
   if (scrollSyncLocked) {
     btn.classList.add("active");
-    btn.title = "取消同步滚动";
+    btn.title = t("toolbar.scrollUnlock");
     icon.className = "fa-solid fa-lock";
   } else {
     btn.classList.remove("active");
-    btn.title = "锁定同步滚动（分屏）";
+    btn.title = t("toolbar.scrollLock");
     icon.className = "fa-solid fa-lock-open";
   }
 
@@ -1156,7 +1410,7 @@ function toggleScrollSyncLock() {
   if (scrollSyncLocked && currentViewMode === "split") {
     applyScrollSync("editor");
   }
-  showToast(scrollSyncLocked ? "已锁定同步滚动" : "已取消同步滚动");
+  showToast(scrollSyncLocked ? t("toast.scrollLocked") : t("toast.scrollUnlocked"));
 }
 
 function initSyncScroll() {
@@ -1176,103 +1430,48 @@ function initSyncScroll() {
 }
 
 // ── Settings modal ─────────────────────────────────────
-async function updateSettingsDefaultStatus() {
-  const status = $("#settings-default-status");
-  const btn = $<HTMLButtonElement>("#settings-btn-default-app");
-  if (!status || !btn) return;
-  btn.disabled = false;
-  try {
-    const isDefault = await invoke<boolean>("is_md_default_handler");
-    if (isDefault) {
-      status.textContent = "当前已是 Markdown 默认打开方式";
-      btn.textContent = "重新注册默认打开方式";
-      btn.classList.add("active");
-    } else {
-      status.textContent = "尚未设为 Markdown 默认打开方式";
-      btn.textContent = "设为默认打开方式";
-      btn.classList.remove("active");
-    }
-  } catch {
-    status.textContent = "此功能仅支持 Windows";
-    btn.disabled = true;
+type SettingsPanel = "general" | "appearance" | "system";
+
+function getWelcomeContent(): string {
+  if (getLanguage() === "en") {
+    return `# Welcome to MD Editor
+
+A lightweight **Markdown editor** built with Tauri and Tailwind CSS.
+
+## Features
+
+- 🚀 **Fast & light** — native desktop app with Tauri
+- 📝 **Live preview** — edit and preview in sync
+- 📂 **Folder browser** — open a folder from the toolbar
+- 🎨 **Syntax highlighting** — GFM tables and task lists
+- 🌙 **Dark mode** — toggle with the sun/moon button
+- ⌨️ **Shortcuts** — \`Ctrl+B\` bold, \`Ctrl+S\` save
+
+## Quick start
+
+1. Click **Open file** or **Open folder** in the toolbar
+2. Start writing Markdown
+3. Press \`Ctrl+S\` to save
+
+> Tip: click the ☰ button to expand the sidebar
+
+\`\`\`javascript
+function hello() {
+  console.log("Hello, MD Editor!");
+}
+\`\`\`
+
+| Action | Shortcut |
+|--------|----------|
+| Bold | Ctrl+B |
+| Italic | Ctrl+I |
+| Save | Ctrl+S |
+| Open | Ctrl+O |
+| New | Ctrl+N |
+`;
   }
-}
 
-function openSettings() {
-  const modal = $("#settings-modal");
-  modal.classList.remove("hidden");
-  modal.classList.add("open");
-  updateSettingsDefaultStatus();
-}
-
-function closeSettings() {
-  const modal = $("#settings-modal");
-  modal.classList.remove("open");
-  modal.classList.add("hidden");
-}
-
-async function registerDefaultAppFromSettings() {
-  try {
-    await invoke("register_md_default_handler");
-    showToast("已设为 Markdown 默认打开方式");
-    await updateSettingsDefaultStatus();
-  } catch (e) {
-    alert(`设置失败: ${e}`);
-  }
-}
-
-function initSettings() {
-  $("#btn-settings")?.addEventListener("click", openSettings);
-  $("#settings-close")?.addEventListener("click", closeSettings);
-  $("#settings-backdrop")?.addEventListener("click", closeSettings);
-  $("#settings-btn-default-app")?.addEventListener(
-    "click",
-    registerDefaultAppFromSettings
-  );
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && $("#settings-modal").classList.contains("open")) {
-      closeSettings();
-    }
-  });
-}
-
-// ── Default app (Windows) ─────────────────────────────
-async function initOpenFileListener() {
-  await listen<string[]>("open-files", async (event) => {
-    await openPathsFromSystem(event.payload);
-  });
-}
-
-async function openLaunchFiles(): Promise<boolean> {
-  try {
-    const paths: string[] = await invoke("take_launch_files");
-    if (paths.length === 0) return false;
-    return openPathsFromSystem(paths);
-  } catch (e) {
-    console.error("打开启动文件失败:", e);
-    return false;
-  }
-}
-
-// ── Initialize ─────────────────────────────────────────
-let initialized = false;
-window.addEventListener("DOMContentLoaded", async () => {
-  if (initialized) return;
-  initialized = true;
-
-  initSplitter();
-  initDragDrop();
-  initSyncScroll();
-  initSettings();
-  initToolbarLayout();
-  applySidebarState();
-  setSidebarTab("files");
-  await initOpenFileListener();
-
-  const openedFromLaunch = await openLaunchFiles();
-  if (!openedFromLaunch) {
-    editor.value = `# 欢迎使用 MD Editor
+  return `# 欢迎使用 MD Editor
 
 这是一个轻量化的 **Markdown 编辑器**，基于 Tauri + Tailwind CSS 构建。
 
@@ -1307,12 +1506,356 @@ function hello() {
 | 打开 | Ctrl+O |
 | 新建 | Ctrl+N |
 `;
+}
 
+function applyToolbarI18n() {
+  const map: Record<string, string> = {
+    "#btn-sidebar-toggle": "toolbar.sidebar",
+    "#btn-open-folder": "toolbar.openFolder",
+    "#btn-settings": "toolbar.settings",
+    "#btn-new": "toolbar.new",
+    "#btn-open": "toolbar.open",
+    "#btn-save": "toolbar.save",
+    "#btn-save-as": "toolbar.saveAs",
+    "#btn-view-edit": "toolbar.viewEdit",
+    "#btn-view-split": "toolbar.viewSplit",
+    "#btn-view-preview": "toolbar.viewPreview",
+    "#sidebar-tab-files": "sidebar.tabFiles",
+    "#sidebar-tab-toc": "sidebar.tabToc",
+    "#btn-refresh-sidebar": "sidebar.refresh",
+  };
+
+  for (const [selector, key] of Object.entries(map)) {
+    const el = document.querySelector(selector);
+    if (el) el.setAttribute("title", t(key));
+  }
+
+  const formatTitles: Record<string, string> = {
+    bold: "toolbar.bold",
+    italic: "toolbar.italic",
+    strikethrough: "toolbar.strikethrough",
+    heading1: "toolbar.heading1",
+    heading2: "toolbar.heading2",
+    heading3: "toolbar.heading3",
+    ul: "toolbar.ul",
+    ol: "toolbar.ol",
+    task: "toolbar.task",
+    quote: "toolbar.quote",
+    code: "toolbar.code",
+    codeblock: "toolbar.codeblock",
+    link: "toolbar.link",
+    image: "toolbar.image",
+    hr: "toolbar.hr",
+    table: "toolbar.table",
+  };
+
+  document.querySelectorAll("[data-action]").forEach((el) => {
+    const action = el.getAttribute("data-action");
+    if (!action || !formatTitles[action]) return;
+    el.setAttribute("title", t(formatTitles[action]));
+  });
+
+  updateScrollLockButton();
+  applyTheme(appSettings.theme);
+}
+
+async function applyLanguageSetting(language: Language) {
+  setLanguage(language);
+  applyI18nToDom();
+  applyToolbarI18n();
+  updateStatus();
+  updateToolbarDocumentTitle();
+  updateTitle();
+  await updateSettingsDefaultStatus();
+
+  if (!currentFilePath && !isModified) {
+    editor.value = getWelcomeContent();
+    updatePreview();
+  }
+
+  await refreshFileList();
+}
+
+async function applyAppSettings(settings: AppSettings, options?: { startup?: boolean }) {
+  appSettings = settings;
+
+  await applyLanguageSetting(settings.language);
+  applyTheme(settings.theme);
+
+  if (options?.startup) {
+    sidebarVisible = settings.defaultSidebarVisible;
+    scrollSyncLocked = settings.defaultScrollSyncLocked;
+    applySidebarState();
+    setViewMode(settings.defaultViewMode);
+    updateSidebarDocumentsVisibility();
+    setSidebarTab(resolveSidebarTab(settings.defaultSidebarTab));
+    await refreshFileList();
+  }
+
+  updateScrollLockButton();
+}
+
+function syncSettingsFormFromState() {
+  const viewInput = document.querySelector<HTMLInputElement>(
+    `input[name="setting-view-mode"][value="${appSettings.defaultViewMode}"]`
+  );
+  if (viewInput) viewInput.checked = true;
+
+  const langInput = document.querySelector<HTMLInputElement>(
+    `input[name="setting-language"][value="${appSettings.language}"]`
+  );
+  if (langInput) langInput.checked = true;
+
+  const themeInput = document.querySelector<HTMLInputElement>(
+    `input[name="setting-theme"][value="${appSettings.theme}"]`
+  );
+  if (themeInput) themeInput.checked = true;
+
+  const scrollLock = $<HTMLInputElement>("#setting-scroll-lock");
+  scrollLock.checked = appSettings.defaultScrollSyncLocked;
+
+  const sidebar = $<HTMLInputElement>("#setting-sidebar-visible");
+  sidebar.checked = appSettings.defaultSidebarVisible;
+
+  const tabInput = document.querySelector<HTMLInputElement>(
+    `input[name="setting-sidebar-tab"][value="${appSettings.defaultSidebarTab}"]`
+  );
+  if (tabInput) tabInput.checked = true;
+
+  $<HTMLInputElement>("#setting-show-siblings").checked =
+    appSettings.showSiblingDocuments;
+  $<HTMLInputElement>("#setting-show-history").checked =
+    appSettings.showHistoryDocuments;
+}
+
+async function persistSettings(patch: Partial<AppSettings>) {
+  appSettings = { ...appSettings, ...patch };
+  try {
+    await saveAppSettings(appSettings);
+  } catch (e) {
+    console.error("保存设置失败:", e);
+    alert(`保存设置失败: ${e}`);
+  }
+}
+
+function onDocumentListSettingsChanged() {
+  const showSiblingDocuments = $<HTMLInputElement>("#setting-show-siblings").checked;
+  const showHistoryDocuments = $<HTMLInputElement>("#setting-show-history").checked;
+  const docsWereDisabled = !isDocumentsPanelEnabled();
+
+  void persistSettings({ showSiblingDocuments, showHistoryDocuments });
+  updateSidebarDocumentsVisibility();
+
+  if (!isDocumentsPanelEnabled()) {
+    setSidebarTab("toc");
+  } else if (docsWereDisabled) {
+    setSidebarTab(resolveSidebarTab(appSettings.defaultSidebarTab));
+  } else {
+    setSidebarTab(resolveSidebarTab(sidebarTab));
+  }
+
+  void refreshFileList();
+}
+
+function setSettingsPanel(panel: SettingsPanel) {
+  document.querySelectorAll(".settings-nav-item").forEach((item) => {
+    item.classList.toggle(
+      "active",
+      item.getAttribute("data-settings-panel") === panel
+    );
+  });
+
+  document.querySelectorAll(".settings-panel").forEach((section) => {
+    const id = section.id.replace("settings-panel-", "");
+    section.classList.toggle("active", id === panel);
+    section.classList.toggle("hidden", id !== panel);
+  });
+}
+
+async function updateSettingsDefaultStatus() {
+  const status = $("#settings-default-status");
+  const btn = $<HTMLButtonElement>("#settings-btn-default-app");
+  if (!status || !btn) return;
+  btn.disabled = false;
+  try {
+    const isDefault = await invoke<boolean>("is_md_default_handler");
+    if (isDefault) {
+      status.textContent = t("settings.fileAssoc.isDefault");
+      btn.textContent = t("settings.fileAssoc.reRegister");
+      btn.classList.add("active");
+    } else {
+      status.textContent = t("settings.fileAssoc.notDefault");
+      btn.textContent = t("settings.fileAssoc.register");
+      btn.classList.remove("active");
+    }
+  } catch {
+    status.textContent = t("settings.fileAssoc.windowsOnly");
+    btn.disabled = true;
+  }
+}
+
+function openSettings() {
+  const modal = $("#settings-modal");
+  modal.classList.remove("hidden");
+  modal.classList.add("open");
+  syncSettingsFormFromState();
+  updateSettingsDefaultStatus();
+}
+
+function closeSettings() {
+  const modal = $("#settings-modal");
+  modal.classList.remove("open");
+  modal.classList.add("hidden");
+}
+
+async function registerDefaultAppFromSettings() {
+  try {
+    await invoke("register_md_default_handler");
+    showToast(t("toast.defaultApp"));
+    await updateSettingsDefaultStatus();
+  } catch (e) {
+    alert(`设置失败: ${e}`);
+  }
+}
+
+function initSettings() {
+  $("#btn-settings")?.addEventListener("click", openSettings);
+  $("#settings-close")?.addEventListener("click", closeSettings);
+  $("#settings-btn-default-app")?.addEventListener(
+    "click",
+    registerDefaultAppFromSettings
+  );
+
+  document.querySelectorAll(".settings-nav-item").forEach((item) => {
+    item.addEventListener("click", () => {
+      const panel = item.getAttribute("data-settings-panel") as SettingsPanel;
+      setSettingsPanel(panel);
+    });
+  });
+
+  document
+    .querySelectorAll<HTMLInputElement>("input[name='setting-view-mode']")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        const mode = input.value as ViewMode;
+        void persistSettings({ defaultViewMode: mode });
+        setViewMode(mode);
+      });
+    });
+
+  $<HTMLInputElement>("#setting-scroll-lock")?.addEventListener("change", (e) => {
+    const locked = (e.target as HTMLInputElement).checked;
+    void persistSettings({ defaultScrollSyncLocked: locked });
+    scrollSyncLocked = locked;
+    updateScrollLockButton();
+    if (locked && currentViewMode === "split") {
+      applyScrollSync("editor");
+    }
+  });
+
+  $<HTMLInputElement>("#setting-sidebar-visible")?.addEventListener(
+    "change",
+    (e) => {
+      const visible = (e.target as HTMLInputElement).checked;
+      void persistSettings({ defaultSidebarVisible: visible });
+      sidebarVisible = visible;
+      applySidebarState();
+    }
+  );
+
+  document
+    .querySelectorAll<HTMLInputElement>("input[name='setting-sidebar-tab']")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        const tab = input.value as SidebarTab;
+        void persistSettings({ defaultSidebarTab: tab });
+        setSidebarTab(tab);
+      });
+    });
+
+  $<HTMLInputElement>("#setting-show-siblings")?.addEventListener("change", () => {
+    onDocumentListSettingsChanged();
+  });
+
+  $<HTMLInputElement>("#setting-show-history")?.addEventListener("change", () => {
+    onDocumentListSettingsChanged();
+  });
+
+  document
+    .querySelectorAll<HTMLInputElement>("input[name='setting-language']")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        const language = input.value as Language;
+        void persistSettings({ language });
+        void applyLanguageSetting(language);
+      });
+    });
+
+  document
+    .querySelectorAll<HTMLInputElement>("input[name='setting-theme']")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        const theme = input.value as AppSettings["theme"];
+        void persistSettings({ theme });
+        applyTheme(theme);
+      });
+    });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && $("#settings-modal").classList.contains("open")) {
+      closeSettings();
+    }
+  });
+}
+
+// ── Default app (Windows) ─────────────────────────────
+async function initOpenFileListener() {
+  await listen<string[]>("open-files", async (event) => {
+    await openPathsFromSystem(event.payload);
+  });
+}
+
+async function openLaunchFiles(): Promise<boolean> {
+  try {
+    const paths: string[] = await invoke("take_launch_files");
+    if (paths.length === 0) return false;
+    return openPathsFromSystem(paths);
+  } catch (e) {
+    console.error("打开启动文件失败:", e);
+    return false;
+  }
+}
+
+// ── Initialize ─────────────────────────────────────────
+let initialized = false;
+window.addEventListener("DOMContentLoaded", async () => {
+  if (initialized) return;
+  initialized = true;
+
+  initSplitter();
+  initSidebarFilesSplitter();
+  initDragDrop();
+  initSyncScroll();
+  initSettings();
+  initToolbarLayout();
+
+  appSettings = await loadAppSettings();
+  documentHistory = await loadDocumentHistory();
+  await applyAppSettings(appSettings, { startup: true });
+
+  await initOpenFileListener();
+
+  const openedFromLaunch = await openLaunchFiles();
+  if (!openedFromLaunch) {
+    editor.value = getWelcomeContent();
     updatePreview();
   }
 
   updateStatus();
-  setViewMode("split");
   updateTitle();
 });
 

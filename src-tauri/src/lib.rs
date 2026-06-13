@@ -1,4 +1,6 @@
 mod file_assoc;
+mod document_history;
+mod settings;
 
 use std::fs;
 use std::path::PathBuf;
@@ -130,7 +132,11 @@ pub fn run() {
       list_md_files,
       take_launch_files,
       register_md_default_handler,
-      is_md_default_handler
+      is_md_default_handler,
+      settings::get_app_settings,
+      settings::save_app_settings,
+      document_history::get_document_history,
+      document_history::save_document_history
     ])
     .build(tauri::generate_context!())
     .expect("error while running tauri application")
