@@ -37,10 +37,12 @@ DIST_DIR="dist/windows"
 mkdir -p "$DIST_DIR"
 rm -rf "${DIST_DIR:?}"/*
 
+echo "开始重命名"
 mv "$SETUP_EXE" "$DIST_DIR/MDEditor-${VERSION}-windows-x64-setup.exe"
 cp "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" \
   "$DIST_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"
 
+echo "重命名结果"
 ls -al "$DIST_DIR"
 
 # 避免旧安装包再次进入 target 缓存

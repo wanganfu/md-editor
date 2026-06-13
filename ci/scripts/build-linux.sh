@@ -30,9 +30,11 @@ DIST_DIR="dist/linux"
 mkdir -p "$DIST_DIR"
 rm -rf "${DIST_DIR:?}"/*
 
+echo "开始重命名"
 mv "$DEB_SRC" "$DIST_DIR/MDEditor-${VERSION}-linux-amd64.deb"
 mv "$RPM_SRC" "$DIST_DIR/MDEditor-${VERSION}-linux-amd64.rpm"
 
+echo "重命名结果"
 ls -al "$DIST_DIR"
 
 clean_linux_bundle_output

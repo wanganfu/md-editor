@@ -34,7 +34,7 @@ ${StrLoc}
 !define MANUFACTURER "{{manufacturer}}"
 !define PRODUCTNAME "{{product_name}}"
 ; Install folder name (shortcuts/registry still use PRODUCTNAME)
-!define INSTALLDIRNAME "MD Editor"
+!define INSTALLDIRNAME "MDEditor"
 !define VERSION "{{version}}"
 !define VERSIONWITHBUILD "{{version_with_build}}"
 !define HOMEPAGE "{{homepage}}"
