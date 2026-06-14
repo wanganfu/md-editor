@@ -1,6 +1,6 @@
 # MD Editor
 
-一款轻量、快速的 **Markdown 桌面编辑器**，基于 [Tauri 2](https://v2.tauri.app/) 构建。采用无边框原生窗口，支持实时预览、文件夹浏览、暗色模式与丰富的 Markdown 编辑工具，适合日常写作、笔记整理与文档编写。
+一款轻量、快速的 **Markdown 桌面编辑器**，基于 [Tauri 2](https://v2.tauri.app/) 构建。采用无边框原生窗口，支持实时预览、LaTeX 数学公式、Mermaid 图表、文件夹浏览、暗色模式与丰富的 Markdown 编辑工具，适合日常写作、笔记整理与文档编写。
 
 **当前版本：** 0.1.1
 
@@ -12,25 +12,39 @@
 
 左侧 Markdown 编辑、右侧实时预览，适合边写边看效果。
 
-![分屏模式](screenshot/ScreenShot_2026-06-12_151738_018.png)
+![分屏模式](screenshot/split.png)
 
 ### 仅编辑模式
 
 隐藏预览区与侧边栏，编辑区占满窗口，适合专注写作。
 
-![仅编辑模式](screenshot/ScreenShot_2026-06-12_151832_001.png)
+![仅编辑模式](screenshot/edit.png)
 
 ### 仅预览模式 + 文件浏览器
 
 打开文件夹后，侧边栏列出目录内 Markdown 文件，点击即可切换。
 
-![仅预览模式与文件浏览器](screenshot/ScreenShot_2026-06-12_151814_000.png)
+![仅预览模式与文件浏览器](screenshot/preview.png)
+
+### LaTeX 公式与 Mermaid 图表
+
+支持行内/陈列公式、`\begin{}` 环境及多种 Mermaid 图表，预览实时渲染。
+
+![公式与图表](screenshot/tex.png)
+
+完整示例见仓库内的 [math-mermaid-demo.md](math-mermaid-demo.md)（可用 MD Editor 直接打开预览）。
 
 ### 暗色主题
 
 一键切换暗色模式，夜间使用更舒适。
 
-![暗色主题](screenshot/ScreenShot_2026-06-12_151821_398.png)
+![暗色主题](screenshot/dark.png)
+
+### 设置面板
+
+可配置默认视图、主题、侧边栏、文档列表与 Windows 文件关联等。
+
+![设置面板](screenshot/options.png)
 
 ---
 
@@ -43,8 +57,23 @@
   - 仅编辑：专注写作，编辑区占满窗口
   - 分屏：左侧编辑、右侧预览，中间可拖动调节比例
   - 仅预览：全屏查看渲染结果
-- **工具栏快捷插入** — 粗体、斜体、删除线、标题、列表、任务列表、引用、代码、链接、图片、表格等
+- **工具栏快捷插入** — 粗体、斜体、删除线、标题、列表、任务列表、引用、代码、**行内公式 / 陈列公式**、**Mermaid 图表**、链接、图片、表格等
 - **等宽字体编辑区** — 使用 JetBrains Mono / Fira Code 等等宽字体，便于对齐代码与表格
+
+### 数学公式（KaTeX）
+
+- **行内公式**：`$E=mc^2$`、`\(...\)`
+- **陈列公式（独立成行）**：`$$...$$`、`\[...\]`
+- **LaTeX 环境**：`\begin{equation}`、`\begin{align}`、`\begin{pmatrix}`、`\begin{cases}` 等（KaTeX 支持范围内）
+- 工具栏提供行内公式、陈列公式快捷插入
+
+### 图表（Mermaid）
+
+- 使用标准围栏代码块 ` ```mermaid ` 编写流程图、时序图、类图、甘特图、饼图、思维导图等
+- 预览区异步渲染，随主题自动切换浅色/深色样式
+- 工具栏提供 Mermaid 模板快捷插入
+
+> 语法与示例汇总：[math-mermaid-demo.md](math-mermaid-demo.md)
 
 ### 文件管理
 
@@ -76,6 +105,8 @@
 | 前端 | TypeScript + Vite |
 | 样式 | Tailwind CSS 4 |
 | Markdown 渲染 | [marked](https://marked.js.org/) |
+| 数学公式 | [KaTeX](https://katex.org/) |
+| 图表 | [Mermaid](https://mermaid.js.org/) |
 | 图标 | Font Awesome |
 | 文件对话框 | `@tauri-apps/plugin-dialog` |
 
@@ -85,12 +116,17 @@
 
 ```
 md-editor/
-├── index.html          # 应用主页面
-├── screenshot/         # 应用截图（README 展示用）
+├── index.html              # 应用主页面
+├── math-mermaid-demo.md    # LaTeX 公式与 Mermaid 图表示例文档
+├── screenshot/             # 应用截图（README 展示用）
+├── public/
+│   └── startup-bootstrap.js # 启动时同步应用缓存配置
 ├── src/
-│   ├── main.ts         # 前端逻辑（编辑、预览、文件、快捷键等）
-│   ├── styles.css      # 全局样式与主题变量
-│   └── assets/         # 静态资源（如图标 SVG）
+│   ├── main.ts             # 前端逻辑（编辑、预览、文件、快捷键等）
+│   ├── markedMath.ts       # LaTeX 公式解析与渲染
+│   ├── bootstrapSettings.ts # 启动配置缓存与应用
+│   ├── styles.css          # 全局样式与主题变量
+│   └── assets/             # 静态资源（如图标 SVG）
 ├── src-tauri/
 │   ├── src/
 │   │   ├── main.rs     # Rust 入口
@@ -164,6 +200,7 @@ npm run tauri build
 2. 点击工具栏 **打开** 选择本地文件，或 **打开文件夹** 在侧边栏浏览
 3. 使用 **Ctrl+S** 保存当前文件
 4. 通过工具栏右侧三个按钮切换「仅编辑 / 分屏 / 仅预览」
+5. 需要公式或图表时，使用工具栏对应按钮插入，或打开 [math-mermaid-demo.md](math-mermaid-demo.md) 参考写法
 
 ### 侧边栏
 
@@ -205,6 +242,29 @@ npm run tauri build
 - 链接与图片
 - 表格（GFM）
 - 分割线
+
+### 数学公式（KaTeX）
+
+| 类型 | 写法示例 |
+|------|----------|
+| 行内 | `$E=mc^2$`、`\(\frac{a}{b}\)` |
+| 陈列 | `$$\int_0^1 x^2\,dx$$`、`\[ E = mc^2 \]` |
+| 环境 | `\begin{equation}...\end{equation}`、`\begin{align}...\end{align}`、矩阵/分段函数等 |
+
+矩阵换行请使用 `\\`（两个反斜杠），列之间用 `&` 分隔。
+
+### Mermaid 图表
+
+````markdown
+```mermaid
+flowchart TD
+    A[开始] --> B[结束]
+```
+````
+
+支持 flowchart、sequenceDiagram、classDiagram、gantt、pie、mindmap 等常见类型。
+
+**完整示例文档：** [math-mermaid-demo.md](math-mermaid-demo.md)
 
 ---
 

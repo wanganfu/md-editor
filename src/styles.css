@@ -1,6 +1,40 @@
 @import "tailwindcss";
 @import "@fortawesome/fontawesome-free/css/all.min.css";
 
+/* ── Startup: hide UI until settings are applied ─────── */
+html {
+  background: var(--bg-body);
+}
+
+html:not(.app-ready) body {
+  visibility: hidden;
+}
+
+html.app-ready body {
+  visibility: visible;
+}
+
+/* Apply cached layout before main.ts runs (see public/startup-bootstrap.js) */
+html[data-view-mode="edit"] #preview-pane,
+html[data-view-mode="edit"] #splitter {
+  display: none !important;
+}
+
+html[data-view-mode="preview"] #editor-pane,
+html[data-view-mode="preview"] #splitter {
+  display: none !important;
+}
+
+html[data-sidebar="open"] #sidebar {
+  width: 240px;
+  min-width: 240px;
+}
+
+html:not([data-sidebar="open"]) #sidebar {
+  width: 0;
+  min-width: 0;
+}
+
 /* ── Theme: CSS Custom Properties ────────────────────── */
 :root {
   --bg-body: #ffffff;
@@ -385,6 +419,15 @@
 }
 
 /* ── Markdown Preview ────────────────────────────────── */
+#preview-pane {
+  min-width: 0;
+}
+
+#preview {
+  min-width: 0;
+  overflow-x: clip;
+}
+
 #preview,
 #preview * {
   user-select: text;
@@ -418,6 +461,53 @@
 .md-preview strong { font-weight: 700; } .md-preview em { font-style: italic; }
 .md-preview del { text-decoration: line-through; opacity: 0.6; }
 .md-preview input[type="checkbox"] { margin-right: 0.5rem; accent-color: var(--accent); }
+
+/* ── KaTeX math ──────────────────────────────────────── */
+.md-preview .katex {
+  font-size: 1.05em;
+  color: var(--text-preview);
+}
+
+/* Keep KaTeX default block layout so equation tags sit on the right margin */
+.md-preview .katex-display {
+  margin: 0.75rem 0;
+  overflow: visible;
+}
+
+.md-preview .katex-display > .katex {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.md-preview .katex-display > .katex > .katex-html {
+  display: block;
+  position: relative;
+}
+
+.md-preview .katex-display > .katex > .katex-html > .tag {
+  position: absolute;
+  right: 0;
+  padding-left: 1rem;
+  white-space: nowrap;
+}
+
+.md-preview .katex-error {
+  color: #ef4444;
+}
+
+/* ── Mermaid diagrams ────────────────────────────────── */
+.md-preview .mermaid {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.md-preview .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
 
 /* ── Icon sizing ─────────────────────────────────────── */
 .toolbar-btn i, .win-btn i { font-size: 0.8125rem; width: 0.875rem; text-align: center; }

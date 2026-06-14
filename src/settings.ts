@@ -17,6 +17,8 @@ export interface AppSettings {
   theme: ThemeMode;
 }
 
+export const SETTINGS_CACHE_KEY = "md-editor:settings-cache";
+
 export const DEFAULT_SETTINGS: AppSettings = {
   defaultViewMode: "split",
   defaultScrollSyncLocked: false,
@@ -106,10 +108,33 @@ function normalizeSettings(raw: LegacyAppSettings): AppSettings {
   };
 }
 
+export function readCachedAppSettings(): AppSettings | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+    if (!raw) return null;
+    return normalizeSettings(JSON.parse(raw) as LegacyAppSettings);
+  } catch {
+    return null;
+  }
+}
+
+export function cacheAppSettings(settings: AppSettings): void {
+  try {
+    localStorage.setItem(
+      SETTINGS_CACHE_KEY,
+      JSON.stringify(normalizeSettings(settings))
+    );
+  } catch {
+    /* localStorage may be unavailable */
+  }
+}
+
 export async function loadAppSettings(): Promise<AppSettings> {
   try {
     const raw = await invoke<LegacyAppSettings>("get_app_settings");
-    return normalizeSettings(raw);
+    const settings = normalizeSettings(raw);
+    cacheAppSettings(settings);
+    return settings;
   } catch (e) {
     console.error("加载设置失败:", e);
     return { ...DEFAULT_SETTINGS };
@@ -118,5 +143,6 @@ export async function loadAppSettings(): Promise<AppSettings> {
 
 export async function saveAppSettings(settings: AppSettings): Promise<void> {
   const normalized = normalizeSettings(settings);
+  cacheAppSettings(normalized);
   await invoke("save_app_settings", { settings: normalized });
 }

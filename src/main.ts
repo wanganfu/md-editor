@@ -3,6 +3,13 @@ import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
+import mermaid from "mermaid";
+import "katex/dist/katex.min.css";
+import { markedMathExtension } from "./markedMath";
+import {
+  markAppReady,
+  syncBootstrapSettingsToDocument,
+} from "./bootstrapSettings";
 import {
   applyI18nToDom,
   getLanguage,
@@ -65,8 +72,29 @@ $("#btn-minimize")?.addEventListener("click", () => appWindow.minimize());
 $("#btn-maximize")?.addEventListener("click", () => appWindow.toggleMaximize());
 $("#btn-close")?.addEventListener("click", () => appWindow.close());
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 // ── Marked config ──────────────────────────────────────
 marked.setOptions({ breaks: true, gfm: true });
+
+marked.use(markedMathExtension());
+
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      if (lang === "mermaid") {
+        return `<div class="mermaid">${escapeHtml(text.trim())}</div>`;
+      }
+      return false;
+    },
+  },
+});
 
 const REMOTE_URL_RE =
   /^(https?:|\/\/|data:|mailto:|javascript:|#|asset:|blob:|https:\/\/asset\.)/i;
@@ -149,13 +177,6 @@ interface TocEntry {
   text: string;
   id: string;
   line: number;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/"/g, "&quot;");
 }
 
 function extractHeadings(text: string): TocEntry[] {
@@ -429,15 +450,40 @@ async function refreshSidebar() {
 
 // ── Preview update (debounced) ─────────────────────────
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
+let previewRenderGeneration = 0;
+
+function updateMermaidTheme() {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: isDark ? "dark" : "default",
+    securityLevel: "strict",
+  });
+}
+
+async function renderMermaidInPreview(container: HTMLElement) {
+  const nodes = container.querySelectorAll<HTMLElement>(".mermaid");
+  if (nodes.length === 0) return;
+
+  updateMermaidTheme();
+  try {
+    await mermaid.run({ nodes });
+  } catch {
+    // Keep source visible when a diagram fails to parse.
+  }
+}
 
 function renderPreview(immediate = false) {
-  const run = () => {
+  const run = async () => {
+    const generation = ++previewRenderGeneration;
     const syncRatio =
       scrollSyncLocked && currentViewMode === "split"
         ? getScrollRatio(editor)
         : null;
 
     preview.innerHTML = addHeadingIds(marked.parse(editor.value) as string);
+    await renderMermaidInPreview(preview);
+
+    if (generation !== previewRenderGeneration) return;
 
     if (syncRatio !== null) {
       applyScrollSync("editor", syncRatio);
@@ -455,12 +501,12 @@ function renderPreview(immediate = false) {
   if (immediate) {
     if (previewTimer) clearTimeout(previewTimer);
     previewTimer = null;
-    run();
+    void run();
     return;
   }
 
   if (previewTimer) clearTimeout(previewTimer);
-  previewTimer = setTimeout(run, 100);
+  previewTimer = setTimeout(() => void run(), 100);
 }
 
 function updatePreview() {
@@ -569,6 +615,7 @@ function markSaved() {
 function applySidebarState() {
   const sidebar = $("#sidebar");
   const btn = $("#btn-sidebar-toggle");
+  document.documentElement.dataset.sidebar = sidebarVisible ? "open" : "closed";
   if (sidebarVisible) {
     sidebar.style.width = "240px";
     sidebar.style.minWidth = "240px";
@@ -970,6 +1017,7 @@ async function saveFileAs() {
 // ── View Mode ──────────────────────────────────────────
 function setViewMode(mode: ViewMode) {
   currentViewMode = mode;
+  document.documentElement.dataset.viewMode = mode;
   const editorPane = document.querySelector("#editor-pane") as HTMLElement;
   const previewPane = document.querySelector("#preview-pane") as HTMLElement;
   const splitter = document.querySelector("#splitter") as HTMLElement;
@@ -1033,7 +1081,7 @@ function setViewMode(mode: ViewMode) {
 }
 
 // ── Theme ──────────────────────────────────────────────
-function applyTheme(theme: "light" | "dark") {
+function applyTheme(theme: "light" | "dark", options?: { updatePreview?: boolean }) {
   isDark = theme === "dark";
   const html = document.documentElement;
   const icon = $("#btn-theme").querySelector("i")!;
@@ -1045,6 +1093,9 @@ function applyTheme(theme: "light" | "dark") {
     html.classList.remove("dark");
     icon.className = "fa-solid fa-moon";
     $("#btn-theme").title = t("toolbar.themeLight");
+  }
+  if (options?.updatePreview !== false) {
+    renderPreview(true);
   }
 }
 
@@ -1104,6 +1155,19 @@ const actions: Record<string, ToolAction> = {
     prefix: "\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| ",
     suffix: " |",
     defaultText: "内容",
+  },
+  mathinline: { prefix: "$", suffix: "$", defaultText: "E=mc^2" },
+  mathblock: {
+    prefix: "\\begin{equation}\n",
+    suffix: "\n\\end{equation}",
+    defaultText: "E=mc^2",
+    multiline: true,
+  },
+  mermaid: {
+    prefix: "```mermaid\n",
+    suffix: "\n```",
+    defaultText: "graph TD\n    A[开始] --> B[结束]",
+    multiline: true,
   },
 };
 
@@ -1578,9 +1642,10 @@ async function applyLanguageSetting(language: Language) {
 
 async function applyAppSettings(settings: AppSettings, options?: { startup?: boolean }) {
   appSettings = settings;
+  syncBootstrapSettingsToDocument(settings);
 
   await applyLanguageSetting(settings.language);
-  applyTheme(settings.theme);
+  applyTheme(settings.theme, { updatePreview: !options?.startup });
 
   if (options?.startup) {
     sidebarVisible = settings.defaultSidebarVisible;
@@ -1857,32 +1922,36 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (initialized) return;
   initialized = true;
 
-  initSplitter();
-  initSidebarFilesSplitter();
-  initDragDrop();
-  initSyncScroll();
-  initSettings();
-  initToolbarLayout();
+  try {
+    appSettings = await loadAppSettings();
+    documentHistory = await loadDocumentHistory();
+    await applyAppSettings(appSettings, { startup: true });
 
-  appSettings = await loadAppSettings();
-  documentHistory = await loadDocumentHistory();
-  await applyAppSettings(appSettings, { startup: true });
+    initSplitter();
+    initSidebarFilesSplitter();
+    initDragDrop();
+    initSyncScroll();
+    initSettings();
+    initToolbarLayout();
 
-  let openedFromLaunch = await tryOpenLaunchFiles();
-  if (!openedFromLaunch && pendingOpenFilePaths.length > 0) {
-    openedFromLaunch = await openPathsFromSystem([...pendingOpenFilePaths]);
-    pendingOpenFilePaths.length = 0;
+    let openedFromLaunch = await tryOpenLaunchFiles();
+    if (!openedFromLaunch && pendingOpenFilePaths.length > 0) {
+      openedFromLaunch = await openPathsFromSystem([...pendingOpenFilePaths]);
+      pendingOpenFilePaths.length = 0;
+    }
+
+    appReadyForOpenFiles = true;
+
+    if (!openedFromLaunch) {
+      editor.value = getWelcomeContent();
+      updatePreview();
+    }
+
+    updateStatus();
+    updateTitle();
+  } finally {
+    markAppReady();
   }
-
-  appReadyForOpenFiles = true;
-
-  if (!openedFromLaunch) {
-    editor.value = getWelcomeContent();
-    updatePreview();
-  }
-
-  updateStatus();
-  updateTitle();
 });
 
 // Handle beforeunload
