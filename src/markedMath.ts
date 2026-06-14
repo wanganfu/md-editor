@@ -149,14 +149,172 @@ function protectSegment(src: string): string {
   return out;
 }
 
+function lineStartIndex(src: string, pos: number): number {
+  const nl = src.lastIndexOf("\n", pos - 1);
+  return nl === -1 ? 0 : nl + 1;
+}
+
+function readLine(src: string, pos: number): { start: number; end: number; text: string } {
+  const start = lineStartIndex(src, pos);
+  let end = src.indexOf("\n", start);
+  if (end === -1) end = src.length;
+  return { start, end, text: src.slice(start, end) };
+}
+
+function advancePastNewline(src: string, pos: number): number {
+  if (pos < src.length && src[pos] === "\r") pos += 1;
+  if (pos < src.length && src[pos] === "\n") pos += 1;
+  return pos;
+}
+
+function matchFencedCodeBlock(
+  src: string,
+  pos: number
+): { end: number; text: string } | null {
+  const line = readLine(src, pos);
+  if (pos !== line.start) return null;
+
+  const open = line.text.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+  if (!open) return null;
+
+  const fenceChar = open[1][0];
+  const openLen = open[1].length;
+  let cursor = advancePastNewline(src, line.end);
+
+  while (cursor <= src.length) {
+    if (cursor >= src.length) {
+      return { end: src.length, text: src.slice(line.start) };
+    }
+
+    const current = readLine(src, cursor);
+    const close = current.text.match(/^ {0,3}(`{3,}|~{3,})(?: +|$)/);
+    if (close && close[1][0] === fenceChar && close[1].length >= openLen) {
+      return {
+        end: advancePastNewline(src, current.end),
+        text: src.slice(line.start, advancePastNewline(src, current.end)),
+      };
+    }
+
+    cursor = advancePastNewline(src, current.end);
+  }
+
+  return { end: src.length, text: src.slice(line.start) };
+}
+
+function matchIndentedCodeBlock(
+  src: string,
+  pos: number
+): { end: number; text: string } | null {
+  const line = readLine(src, pos);
+  if (pos !== line.start) return null;
+  if (!/^ {4}|\t/.test(line.text)) return null;
+
+  let cursor = line.start;
+  let blockEnd = line.end;
+
+  while (cursor < src.length) {
+    const current = readLine(src, cursor);
+    if (current.text.length === 0) {
+      const nextPos = advancePastNewline(src, current.end);
+      if (nextPos >= src.length) {
+        blockEnd = current.end;
+        break;
+      }
+      const next = readLine(src, nextPos);
+      if (/^ {4}|\t/.test(next.text)) {
+        blockEnd = next.end;
+        cursor = nextPos;
+        continue;
+      }
+      break;
+    }
+
+    if (!/^ {4}|\t/.test(current.text)) break;
+    blockEnd = current.end;
+    cursor = advancePastNewline(src, current.end);
+  }
+
+  return {
+    end: advancePastNewline(src, blockEnd),
+    text: src.slice(line.start, advancePastNewline(src, blockEnd)),
+  };
+}
+
+function matchInlineCode(
+  src: string,
+  pos: number
+): { end: number; text: string } | null {
+  if (src[pos] !== "`") return null;
+
+  let openLen = 0;
+  while (src[pos + openLen] === "`") openLen += 1;
+
+  let cursor = pos + openLen;
+  while (cursor < src.length) {
+    if (src[cursor] === "`") {
+      let closeLen = 0;
+      while (src[cursor + closeLen] === "`") closeLen += 1;
+      if (closeLen >= openLen) {
+        const end = cursor + openLen;
+        return { end, text: src.slice(pos, end) };
+      }
+      cursor += closeLen;
+      continue;
+    }
+    cursor += 1;
+  }
+
+  return null;
+}
+
+function matchProtectedRegion(
+  src: string,
+  pos: number
+): { end: number; text: string } | null {
+  return (
+    matchFencedCodeBlock(src, pos) ??
+    matchIndentedCodeBlock(src, pos) ??
+    matchInlineCode(src, pos)
+  );
+}
+
+function findNextProtectedStart(src: string, from: number): number {
+  for (let i = from; i < src.length; i += 1) {
+    if (matchProtectedRegion(src, i)) return i;
+
+    const line = readLine(src, i);
+    if (i === line.start) {
+      if (/^ {0,3}(`{3,}|~{3,})/.test(line.text)) return i;
+      if (/^ {4}|\t/.test(line.text)) return i;
+    }
+
+    if (src[i] === "`") return i;
+  }
+
+  return src.length;
+}
+
 function protectMathInMarkdown(src: string): string {
   blockHtml.length = 0;
   inlineHtml.length = 0;
 
-  const parts = src.split(/(```[\s\S]*?```)/g);
-  return parts
-    .map((part, index) => (index % 2 === 1 ? part : protectSegment(part)))
-    .join("");
+  let out = "";
+  let i = 0;
+
+  while (i < src.length) {
+    const protectedRegion = matchProtectedRegion(src, i);
+    if (protectedRegion) {
+      out += protectedRegion.text;
+      i = protectedRegion.end;
+      continue;
+    }
+
+    const next = findNextProtectedStart(src, i + 1);
+    out += protectSegment(src.slice(i, next));
+    i = next;
+  }
+
+  return out;
 }
 
 function escapeRegExp(text: string): string {
