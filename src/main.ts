@@ -37,6 +37,13 @@ import {
   resolveAttachmentLink,
 } from "./objectStorage";
 import { hashContent, morphPreviewHtml } from "./previewMorph";
+import {
+  initPreviewInteractions,
+  refreshPreviewInteractionLabels,
+} from "./previewInteractions";
+import { initBlockBrowserShortcuts } from "./blockBrowserShortcuts";
+
+initBlockBrowserShortcuts();
 
 // ── State ──────────────────────────────────────────────
 let currentFilePath: string | null = null;
@@ -135,6 +142,27 @@ function joinPaths(baseDir: string, relative: string): string {
   return parts.join(isWin ? "\\" : "/");
 }
 
+function resolveLocalFilePath(href: string): string | null {
+  if (!href || isRemoteResourceUrl(href)) return null;
+  if (!currentFilePath) return null;
+
+  try {
+    const decoded = decodeURIComponent(href.trim());
+    const isAbsolute =
+      /^[a-zA-Z]:[/\\]/.test(decoded) ||
+      (decoded.startsWith("/") && !decoded.startsWith("//"));
+
+    return isAbsolute
+      ? decoded
+      : joinPaths(
+          currentFilePath.replace(/[/\\][^/\\]+$/, ""),
+          decoded
+        );
+  } catch {
+    return null;
+  }
+}
+
 function resolveResourceUrl(href: string): string {
   if (!href || isRemoteResourceUrl(href)) return href;
   if (!currentFilePath) return href;
@@ -160,6 +188,11 @@ function resolveResourceUrl(href: string): string {
 
 function rewriteLocalResourceUrls(html: string): string {
   return html
+    .replace(
+      /(<a\b[^>]*?\shref=)(["'])(?!#)([^"']+)\2/gi,
+      (_match, prefix, quote, href) =>
+        `${prefix}${quote}${resolveResourceUrl(href)}${quote}`
+    )
     .replace(
       /(<img\b[^>]*?\ssrc=)(["'])([^"']+)\2/gi,
       (_match, prefix, quote, src) =>
@@ -1798,6 +1831,7 @@ function applyToolbarI18n() {
 async function applyLanguageSetting(language: Language) {
   setLanguage(language);
   applyI18nToDom();
+  refreshPreviewInteractionLabels();
   applyToolbarI18n();
   updateStatus();
   updateToolbarDocumentTitle();
@@ -2144,6 +2178,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     initSidebarFilesSplitter();
     initDragDrop();
     initSyncScroll();
+    initPreviewInteractions({
+      preview,
+      resolveResourceUrl,
+      resolveLocalFilePath,
+    });
     initSettings();
     initToolbarLayout();
 
