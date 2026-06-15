@@ -4,6 +4,10 @@
 
 **当前版本：** 0.1.1
 
+<b style="color:red;">123123</b>
+
+**构建状态** [![Build Status](https://drone.annon.cc/api/badges/anfu/md-editor/status.svg)](https://drone.annon.cc/anfu/md-editor)
+
 ---
 
 ## 界面预览

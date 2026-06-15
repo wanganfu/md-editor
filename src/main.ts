@@ -36,6 +36,7 @@ import {
   isMarkdownFilePath,
   resolveAttachmentLink,
 } from "./objectStorage";
+import { hashContent, morphPreviewHtml } from "./previewMorph";
 
 // ── State ──────────────────────────────────────────────
 let currentFilePath: string | null = null;
@@ -46,6 +47,8 @@ let sidebarVisible = false;
 let sidebarTab: SidebarTab = "files";
 let currentViewMode: ViewMode = "split";
 let scrollSyncLocked = false;
+let scrollSyncSuspended = false;
+let lastTocSignature = "";
 let activeTocId: string | null = null;
 let tocHighlightRaf: number | null = null;
 let documentHistory: string[] = [];
@@ -81,13 +84,22 @@ marked.setOptions({ breaks: true, gfm: true });
 
 marked.use(markedMathExtension());
 
+let previewMermaidBlockIndex = 0;
+
 marked.use({
   renderer: {
     code({ text, lang }) {
       if (lang === "mermaid") {
-        return `<div class="mermaid">${escapeHtml(text.trim())}</div>`;
+        const index = previewMermaidBlockIndex++;
+        const source = text.trim();
+        const contentKey = hashContent(source);
+        return `<div class="mermaid" id="mermaid-block-${index}" data-mermaid-key="${contentKey}">${escapeHtml(source)}</div>`;
       }
-      return false;
+
+      const langClass = lang
+        ? ` class="language-${escapeHtml(lang)}"`
+        : "";
+      return `<pre><code${langClass}>${escapeHtml(text)}\n</code></pre>\n`;
     },
   },
 });
@@ -276,6 +288,7 @@ function resolveSidebarTab(tab: SidebarTab): SidebarTab {
 function renderTocList() {
   const list = $("#sidebar-toc-list");
   const headings = extractHeadings(editor.value);
+  lastTocSignature = getTocSignature(headings);
 
   if (headings.length === 0) {
     activeTocId = null;
@@ -305,6 +318,22 @@ function renderTocList() {
     });
   });
 
+  updateTocHighlight();
+}
+
+function getTocSignature(headings: ReturnType<typeof extractHeadings>): string {
+  return headings
+    .map((heading) => `${heading.level}:${heading.id}:${heading.text}:${heading.line}`)
+    .join("|");
+}
+
+function renderTocListIfNeeded() {
+  const headings = extractHeadings(editor.value);
+  const signature = getTocSignature(headings);
+  if (signature !== lastTocSignature) {
+    renderTocList();
+    return;
+  }
   updateTocHighlight();
 }
 
@@ -369,7 +398,13 @@ function setActiveTocItem(id: string | null) {
   const activeEl = list.querySelector(
     `.sidebar-toc-item[data-id="${CSS.escape(id)}"]`
   );
-  activeEl?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  if (!activeEl) return;
+
+  const listRect = list.getBoundingClientRect();
+  const elRect = activeEl.getBoundingClientRect();
+  if (elRect.top < listRect.top || elRect.bottom > listRect.bottom) {
+    activeEl.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }
 }
 
 function updateTocHighlight() {
@@ -447,25 +482,60 @@ async function refreshSidebar() {
 // ── Preview update (debounced) ─────────────────────────
 let previewTimer: ReturnType<typeof setTimeout> | null = null;
 let previewRenderGeneration = 0;
+let mermaidRunChain: Promise<void> = Promise.resolve();
+let mermaidThemeKey: string | null = null;
 
 function updateMermaidTheme() {
+  const themeKey = isDark ? "dark" : "light";
+  if (mermaidThemeKey === themeKey) return;
+
+  mermaidThemeKey = themeKey;
   mermaid.initialize({
     startOnLoad: false,
     theme: isDark ? "dark" : "default",
-    securityLevel: "strict",
+    securityLevel: "loose",
   });
 }
 
-async function renderMermaidInPreview(container: HTMLElement) {
+async function renderMermaidInPreview(
+  container: HTMLElement,
+  generation: number
+) {
+  if (generation !== previewRenderGeneration) return;
+
   const nodes = container.querySelectorAll<HTMLElement>(".mermaid");
   if (nodes.length === 0) return;
 
   updateMermaidTheme();
+  const themeKey = mermaidThemeKey ?? (isDark ? "dark" : "light");
+  const nodesToRun: HTMLElement[] = [];
+
+  nodes.forEach((node) => {
+    if (
+      node.hasAttribute("data-processed") &&
+      node.getAttribute("data-mermaid-theme") === themeKey
+    ) {
+      return;
+    }
+    node.removeAttribute("data-processed");
+    nodesToRun.push(node);
+  });
+
+  if (nodesToRun.length === 0) return;
+
   try {
-    await mermaid.run({ nodes });
-  } catch {
-    // Keep source visible when a diagram fails to parse.
+    await mermaid.run({ nodes: nodesToRun, suppressErrors: true });
+    nodesToRun.forEach((node) => {
+      node.setAttribute("data-mermaid-theme", themeKey);
+    });
+  } catch (error) {
+    console.error("Mermaid 渲染失败:", error);
   }
+}
+
+function parsePreviewHtml(markdown: string): string {
+  previewMermaidBlockIndex = 0;
+  return addHeadingIds(marked.parse(markdown) as string);
 }
 
 function renderPreview(immediate = false) {
@@ -475,18 +545,40 @@ function renderPreview(immediate = false) {
       scrollSyncLocked && currentViewMode === "split"
         ? getScrollRatio(editor)
         : null;
+    const preservePreviewScroll =
+      currentViewMode === "split" && !scrollSyncLocked;
+    const previewScrollRatio = preservePreviewScroll
+      ? getScrollRatio(preview)
+      : null;
+    const useEditorScrollSync =
+      scrollSyncLocked && currentViewMode === "split";
 
-    preview.innerHTML = addHeadingIds(marked.parse(editor.value) as string);
-    await renderMermaidInPreview(preview);
+    scrollSyncSuspended = true;
+    try {
+      const html = parsePreviewHtml(editor.value);
+      const mermaidThemeKey = isDark ? "dark" : "light";
+      morphPreviewHtml(preview, html, mermaidThemeKey);
+      mermaidRunChain = mermaidRunChain
+        .then(() => renderMermaidInPreview(preview, generation))
+        .catch((error) => {
+          console.error("Mermaid 预览队列失败:", error);
+        });
+      await mermaidRunChain;
 
-    if (generation !== previewRenderGeneration) return;
+      if (generation !== previewRenderGeneration) return;
+    } finally {
+      scrollSyncSuspended = false;
+    }
 
-    if (syncRatio !== null) {
-      applyScrollSync("editor", syncRatio);
+    if (useEditorScrollSync) {
+      markScrollSyncSource("editor");
+      setScrollByRatio(preview, syncRatio ?? getScrollRatio(editor));
+    } else if (previewScrollRatio !== null) {
+      setScrollByRatio(preview, previewScrollRatio);
     }
 
     if (sidebarTab === "toc") {
-      renderTocList();
+      renderTocListIfNeeded();
     } else {
       scheduleTocHighlightUpdate();
     }
@@ -506,6 +598,7 @@ function renderPreview(immediate = false) {
 }
 
 function updatePreview() {
+  if (currentViewMode === "edit") return;
   renderPreview(false);
 }
 
@@ -1128,6 +1221,7 @@ function setViewMode(mode: ViewMode) {
         previewPane.style.flex = "1 1 50%";
       }
       btnSplit.classList.add("active");
+      renderPreview(true);
       break;
     case "preview":
       clearPaneFlex();
@@ -1494,7 +1588,7 @@ function markScrollSyncSource(source: ScrollPane) {
   scrollSyncClearTimer = setTimeout(() => {
     scrollSyncSource = null;
     scrollSyncClearTimer = null;
-  }, 64);
+  }, 120);
 }
 
 function applyScrollSync(source: ScrollPane, ratio?: number) {
@@ -1509,7 +1603,12 @@ function applyScrollSync(source: ScrollPane, ratio?: number) {
 }
 
 function shouldSyncScroll(): boolean {
-  return scrollSyncLocked && currentViewMode === "split";
+  return scrollSyncLocked && currentViewMode === "split" && !scrollSyncSuspended;
+}
+
+/** 光标在左侧编辑器内时，滚动同步仅 Editor → Preview */
+function isEditorDrivingScrollSync(): boolean {
+  return document.activeElement === editor;
 }
 
 function updateScrollLockButton() {
@@ -1540,6 +1639,16 @@ function toggleScrollSyncLock() {
 }
 
 function initSyncScroll() {
+  editor.addEventListener("focus", () => {
+    if (shouldSyncScroll()) {
+      applyScrollSync("editor");
+    }
+  });
+
+  preview.addEventListener("mousedown", () => {
+    editor.blur();
+  });
+
   editor.addEventListener("scroll", () => {
     scheduleTocHighlightUpdate();
     if (!shouldSyncScroll() || scrollSyncSource === "preview") return;
@@ -1549,6 +1658,7 @@ function initSyncScroll() {
   preview.addEventListener("scroll", () => {
     scheduleTocHighlightUpdate();
     if (!shouldSyncScroll() || scrollSyncSource === "editor") return;
+    if (isEditorDrivingScrollSync()) return;
     applyScrollSync("preview");
   });
 

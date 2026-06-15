@@ -426,6 +426,7 @@ html:not([data-sidebar="open"]) #sidebar {
 #preview {
   min-width: 0;
   overflow-x: clip;
+  contain: content;
 }
 
 #preview,

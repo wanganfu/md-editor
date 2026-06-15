@@ -9,11 +9,9 @@ const KATEX_OPTIONS = {
 
 const BLOCK_PLACEHOLDER = "XMDMATHBLOCK";
 const INLINE_PLACEHOLDER = "XMDMATHINLINE";
-const HTML_LINE_PLACEHOLDER = "XMDHTMLLINE";
 
 const blockHtml: string[] = [];
 const inlineHtml: string[] = [];
-const htmlLineBlocks: string[] = [];
 
 const VOID_HTML_ELEMENTS = new Set([
   "area",
@@ -83,10 +81,36 @@ function isStandaloneHtmlLine(line: string): boolean {
   return closeSuffix.test(trimmed);
 }
 
-function stashHtmlLine(html: string): string {
-  const id = htmlLineBlocks.length;
-  htmlLineBlocks.push(html);
-  return `\n\n${HTML_LINE_PLACEHOLDER}${id}${HTML_LINE_PLACEHOLDER}\n\n`;
+function isInsideDisplayMathBlock(src: string, pos: number): boolean {
+  let i = 0;
+  while (i < pos) {
+    const dollarBlock = matchStandaloneDollarBlock(src, i);
+    if (dollarBlock) {
+      if (pos < dollarBlock.end) return true;
+      i = dollarBlock.end;
+      continue;
+    }
+
+    const bracketBlock = matchStandaloneBracketBlock(src, i);
+    if (bracketBlock) {
+      if (pos < bracketBlock.end) return true;
+      i = bracketBlock.end;
+      continue;
+    }
+
+    if (src.startsWith("\\begin{", i)) {
+      const block = matchBeginEndBlock(src, i);
+      if (block) {
+        if (pos < block.end) return true;
+        i = block.end;
+        continue;
+      }
+    }
+
+    i += 1;
+  }
+
+  return false;
 }
 
 function matchBeginEndBlock(
@@ -140,6 +164,78 @@ function matchDelimited(
   };
 }
 
+/** 独立成行的 $$...$$：整行只有公式，或多行块（首尾行各一个 $$） */
+function matchStandaloneDollarBlock(
+  src: string,
+  start: number
+): { end: number; text: string } | null {
+  const line = readLine(src, start);
+  if (start !== line.start || !src.startsWith("$$", start)) return null;
+
+  const trimmed = line.text.trim();
+  const singleLine = trimmed.match(/^\$\$([\s\S]*?)\$\$$/);
+  if (singleLine) {
+    return {
+      end: advancePastNewline(src, line.end),
+      text: singleLine[1].trim(),
+    };
+  }
+
+  if (trimmed !== "$$") return null;
+
+  const contentStart = advancePastNewline(src, line.end);
+  let cursor = contentStart;
+
+  while (cursor < src.length) {
+    const current = readLine(src, cursor);
+    if (current.text.trim() === "$$") {
+      return {
+        end: advancePastNewline(src, current.end),
+        text: src.slice(contentStart, current.start).trim(),
+      };
+    }
+    cursor = advancePastNewline(src, current.end);
+  }
+
+  return null;
+}
+
+/** 独立成行的 \[...\]：整行只有公式，或多行块（首尾行各一个 \[ / \]） */
+function matchStandaloneBracketBlock(
+  src: string,
+  start: number
+): { end: number; text: string } | null {
+  const line = readLine(src, start);
+  if (start !== line.start || !src.startsWith("\\[", start)) return null;
+
+  const trimmed = line.text.trim();
+  const singleLine = trimmed.match(/^\\\[([\s\S]*?)\\\]$/);
+  if (singleLine) {
+    return {
+      end: advancePastNewline(src, line.end),
+      text: singleLine[1].trim(),
+    };
+  }
+
+  if (trimmed !== "\\[") return null;
+
+  const contentStart = advancePastNewline(src, line.end);
+  let cursor = contentStart;
+
+  while (cursor < src.length) {
+    const current = readLine(src, cursor);
+    if (current.text.trim() === "\\]") {
+      return {
+        end: advancePastNewline(src, current.end),
+        text: src.slice(contentStart, current.start).trim(),
+      };
+    }
+    cursor = advancePastNewline(src, current.end);
+  }
+
+  return null;
+}
+
 function protectSegment(src: string): string {
   let out = "";
   let i = 0;
@@ -147,28 +243,40 @@ function protectSegment(src: string): string {
   while (i < src.length) {
     const rest = src.slice(i);
 
-    if (rest.startsWith("\\begin{")) {
-      const block = matchBeginEndBlock(src, i);
-      if (block?.text) {
-        out += stashBlock(renderDisplayMath(block.text));
-        i = block.end;
-        continue;
-      }
-    }
-
     if (rest.startsWith("$$")) {
-      const block = matchDelimited(src, i, "$$", "$$");
-      if (block?.text) {
+      const block = matchStandaloneDollarBlock(src, i);
+      if (block) {
         out += stashBlock(renderDisplayMath(block.text));
         i = block.end;
         continue;
       }
+      out += "$$";
+      i += 2;
+      continue;
     }
 
     if (rest.startsWith("\\[")) {
-      const block = matchDelimited(src, i, "\\[", "\\]");
-      if (block?.text) {
+      const block = matchStandaloneBracketBlock(src, i);
+      if (block) {
         out += stashBlock(renderDisplayMath(block.text));
+        i = block.end;
+        continue;
+      }
+      out += "\\[";
+      i += 2;
+      continue;
+    }
+
+    if (rest.startsWith("\\]")) {
+      out += "\\]";
+      i += 2;
+      continue;
+    }
+
+    if (rest.startsWith("\\begin{") && !isInsideDisplayMathBlock(src, i)) {
+      const block = matchBeginEndBlock(src, i);
+      if (block) {
+        out += stashBlock(renderDisplayMath(block.text.trim()));
         i = block.end;
         continue;
       }
@@ -185,7 +293,7 @@ function protectSegment(src: string): string {
 
     if (rest[0] === "$" && rest[1] !== "$") {
       const close = rest.indexOf("$", 1);
-      if (close > 1) {
+      if (close > 1 && rest[close + 1] !== "$") {
         out += stashInline(renderInlineMath(rest.slice(1, close)));
         i += close + 1;
         continue;
@@ -328,6 +436,39 @@ function matchProtectedRegion(
   );
 }
 
+function tryStashDisplayBlock(
+  src: string,
+  i: number
+): { out: string; next: number } | null {
+  const dollarBlock = matchStandaloneDollarBlock(src, i);
+  if (dollarBlock) {
+    return {
+      out: stashBlock(renderDisplayMath(dollarBlock.text)),
+      next: dollarBlock.end,
+    };
+  }
+
+  const bracketBlock = matchStandaloneBracketBlock(src, i);
+  if (bracketBlock) {
+    return {
+      out: stashBlock(renderDisplayMath(bracketBlock.text)),
+      next: bracketBlock.end,
+    };
+  }
+
+  if (src.startsWith("\\begin{", i) && !isInsideDisplayMathBlock(src, i)) {
+    const block = matchBeginEndBlock(src, i);
+    if (block) {
+      return {
+        out: stashBlock(renderDisplayMath(block.text.trim())),
+        next: block.end,
+      };
+    }
+  }
+
+  return null;
+}
+
 function findNextProtectedStart(src: string, from: number): number {
   for (let i = from; i < src.length; i += 1) {
     if (matchProtectedRegion(src, i)) return i;
@@ -336,9 +477,23 @@ function findNextProtectedStart(src: string, from: number): number {
     if (i === line.start) {
       if (/^ {0,3}(`{3,}|~{3,})/.test(line.text)) return i;
       if (/^ {4}|\t/.test(line.text)) return i;
+      if (
+        !isInsideDisplayMathBlock(src, i) &&
+        isStandaloneHtmlLine(line.text)
+      ) {
+        return i;
+      }
+      if (matchStandaloneDollarBlock(src, i)) return i;
+      if (matchStandaloneBracketBlock(src, i)) return i;
+      if (
+        src.startsWith("\\begin{", i) &&
+        !isInsideDisplayMathBlock(src, i)
+      ) {
+        return i;
+      }
     }
 
-    if (src[i] === "`") return i;
+    if (matchInlineCode(src, i)) return i;
   }
 
   return src.length;
@@ -347,7 +502,6 @@ function findNextProtectedStart(src: string, from: number): number {
 function protectMathInMarkdown(src: string): string {
   blockHtml.length = 0;
   inlineHtml.length = 0;
-  htmlLineBlocks.length = 0;
 
   let out = "";
   let i = 0;
@@ -360,9 +514,20 @@ function protectMathInMarkdown(src: string): string {
       continue;
     }
 
+    const displayBlock = tryStashDisplayBlock(src, i);
+    if (displayBlock) {
+      out += displayBlock.out;
+      i = displayBlock.next;
+      continue;
+    }
+
     const line = readLine(src, i);
-    if (i === line.start && isStandaloneHtmlLine(line.text)) {
-      out += stashHtmlLine(line.text.trim());
+    if (
+      i === line.start &&
+      !isInsideDisplayMathBlock(src, i) &&
+      isStandaloneHtmlLine(line.text)
+    ) {
+      out += `${line.text.trim()}\n`;
       i = advancePastNewline(src, line.end);
       continue;
     }
@@ -381,15 +546,6 @@ function escapeRegExp(text: string): string {
 
 function replacePlaceholders(html: string): string {
   let result = html;
-
-  for (let id = 0; id < htmlLineBlocks.length; id++) {
-    const token = `${HTML_LINE_PLACEHOLDER}${id}${HTML_LINE_PLACEHOLDER}`;
-    const re = new RegExp(
-      `<p>\\s*${escapeRegExp(token)}\\s*</p>|${escapeRegExp(token)}`,
-      "g"
-    );
-    result = result.replace(re, htmlLineBlocks[id]);
-  }
 
   for (let id = 0; id < blockHtml.length; id++) {
     const token = `${BLOCK_PLACEHOLDER}${id}${BLOCK_PLACEHOLDER}`;
@@ -427,5 +583,4 @@ export function markedMathExtension(): MarkedExtension {
 export function clearMathPlaceholders(): void {
   blockHtml.length = 0;
   inlineHtml.length = 0;
-  htmlLineBlocks.length = 0;
 }
