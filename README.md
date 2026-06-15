@@ -2,9 +2,7 @@
 
 一款轻量、快速的 **Markdown 桌面编辑器**，基于 [Tauri 2](https://v2.tauri.app/) 构建。采用无边框原生窗口，支持实时预览、LaTeX 数学公式、Mermaid 图表、文件夹浏览、暗色模式与丰富的 Markdown 编辑工具，适合日常写作、笔记整理与文档编写。
 
-**当前版本：** 0.1.1
-
-<b style="color:red;">123123</b>
+**当前版本：** 1.0.2
 
 **构建状态** [![Build Status](https://drone.annon.cc/api/badges/anfu/md-editor/status.svg)](https://drone.annon.cc/anfu/md-editor)
 
