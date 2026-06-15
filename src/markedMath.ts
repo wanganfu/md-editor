@@ -9,9 +9,28 @@ const KATEX_OPTIONS = {
 
 const BLOCK_PLACEHOLDER = "XMDMATHBLOCK";
 const INLINE_PLACEHOLDER = "XMDMATHINLINE";
+const HTML_LINE_PLACEHOLDER = "XMDHTMLLINE";
 
 const blockHtml: string[] = [];
 const inlineHtml: string[] = [];
+const htmlLineBlocks: string[] = [];
+
+const VOID_HTML_ELEMENTS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
 
 function renderInlineMath(text: string): string {
   return katex.renderToString(text.trim(), {
@@ -37,6 +56,37 @@ function stashInline(html: string): string {
   const id = inlineHtml.length;
   inlineHtml.push(html);
   return `${INLINE_PLACEHOLDER}${id}${INLINE_PLACEHOLDER}`;
+}
+
+function isStandaloneHtmlLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("<") || trimmed.startsWith("<!--")) {
+    return false;
+  }
+
+  if (/^<[A-Za-z][\w-]*(?:\s[^>]*)?\/>$/.test(trimmed)) {
+    return true;
+  }
+
+  const voidMatch = trimmed.match(/^<([A-Za-z][\w-]*)(\s[^>]*)?>$/);
+  if (voidMatch && VOID_HTML_ELEMENTS.has(voidMatch[1].toLowerCase())) {
+    return true;
+  }
+
+  const openMatch = trimmed.match(/^<([A-Za-z][\w-]*)(\s[^>]*?)?>/);
+  if (!openMatch) {
+    return false;
+  }
+
+  const tag = openMatch[1];
+  const closeSuffix = new RegExp(`</${tag}\\s*>\\s*$`, "i");
+  return closeSuffix.test(trimmed);
+}
+
+function stashHtmlLine(html: string): string {
+  const id = htmlLineBlocks.length;
+  htmlLineBlocks.push(html);
+  return `\n\n${HTML_LINE_PLACEHOLDER}${id}${HTML_LINE_PLACEHOLDER}\n\n`;
 }
 
 function matchBeginEndBlock(
@@ -297,6 +347,7 @@ function findNextProtectedStart(src: string, from: number): number {
 function protectMathInMarkdown(src: string): string {
   blockHtml.length = 0;
   inlineHtml.length = 0;
+  htmlLineBlocks.length = 0;
 
   let out = "";
   let i = 0;
@@ -306,6 +357,13 @@ function protectMathInMarkdown(src: string): string {
     if (protectedRegion) {
       out += protectedRegion.text;
       i = protectedRegion.end;
+      continue;
+    }
+
+    const line = readLine(src, i);
+    if (i === line.start && isStandaloneHtmlLine(line.text)) {
+      out += stashHtmlLine(line.text.trim());
+      i = advancePastNewline(src, line.end);
       continue;
     }
 
@@ -323,6 +381,15 @@ function escapeRegExp(text: string): string {
 
 function replacePlaceholders(html: string): string {
   let result = html;
+
+  for (let id = 0; id < htmlLineBlocks.length; id++) {
+    const token = `${HTML_LINE_PLACEHOLDER}${id}${HTML_LINE_PLACEHOLDER}`;
+    const re = new RegExp(
+      `<p>\\s*${escapeRegExp(token)}\\s*</p>|${escapeRegExp(token)}`,
+      "g"
+    );
+    result = result.replace(re, htmlLineBlocks[id]);
+  }
 
   for (let id = 0; id < blockHtml.length; id++) {
     const token = `${BLOCK_PLACEHOLDER}${id}${BLOCK_PLACEHOLDER}`;
@@ -360,4 +427,5 @@ export function markedMathExtension(): MarkedExtension {
 export function clearMathPlaceholders(): void {
   blockHtml.length = 0;
   inlineHtml.length = 0;
+  htmlLineBlocks.length = 0;
 }

@@ -175,6 +175,10 @@
               <i class="fa-solid fa-sliders"></i>
               <span data-i18n="settings.nav.general">常规</span>
             </button>
+            <button type="button" class="settings-nav-item" data-settings-panel="attachments">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span data-i18n="settings.nav.attachments">附件上传</span>
+            </button>
             <button type="button" class="settings-nav-item" data-settings-panel="appearance">
               <i class="fa-solid fa-palette"></i>
               <span data-i18n="settings.nav.appearance">外观</span>
@@ -244,6 +248,22 @@
                     <input type="checkbox" id="setting-show-history" />
                     <span data-i18n="settings.documentListHistory">历史文档</span>
                   </label>
+                </div>
+              </div>
+            </section>
+            <section id="settings-panel-attachments" class="settings-panel hidden">
+              <div class="settings-field">
+                <label class="settings-checkbox">
+                  <input type="checkbox" id="setting-attachment-upload-enabled" />
+                  <span data-i18n="settings.attachmentUpload.enabled">启用附件上传</span>
+                </label>
+                <p class="settings-desc" data-i18n="settings.attachmentUpload.enabled.desc">开启后，将附件拖入编辑区会调用下方脚本获取链接并插入；Markdown 文件仍按原逻辑打开。</p>
+              </div>
+              <div id="settings-attachment-fields" class="settings-attachment-fields hidden">
+                <div class="settings-field">
+                  <div class="settings-field-label" data-i18n="settings.attachmentUpload.linkScript">获取链接脚本 (getLink)</div>
+                  <p class="settings-desc" data-i18n="settings.attachmentUpload.linkScript.desc">定义 async function getLink(fileName, filePath, fileBytes)，自行完成上传逻辑并返回下载链接字符串。</p>
+                  <textarea id="setting-attachment-link-script" class="settings-textarea" rows="14" data-i18n-placeholder="settings.attachmentUpload.linkScript.placeholder"></textarea>
                 </div>
               </div>
             </section>

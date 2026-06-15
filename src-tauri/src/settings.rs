@@ -22,6 +22,10 @@ pub struct AppSettings {
   pub document_list_mode: String,
   pub language: String,
   pub theme: String,
+  #[serde(default)]
+  pub attachment_upload_enabled: bool,
+  #[serde(default = "default_attachment_link_script")]
+  pub attachment_link_script: String,
 }
 
 fn default_true() -> bool {
@@ -30,6 +34,10 @@ fn default_true() -> bool {
 
 fn default_split_ratio() -> f64 {
   0.5
+}
+
+fn default_attachment_link_script() -> String {
+  "async function getLink(fileName, filePath, fileBytes) {\n  const blob = new Blob([fileBytes]);\n  const formData = new FormData();\n  formData.append('file', blob, fileName);\n  const response = await fetch('https://api.example.com/upload', {\n    method: 'POST',\n    headers: { Token: 'your-token' },\n    body: formData,\n  });\n  if (!response.ok) {\n    throw new Error(`Upload failed: ${response.status}`);\n  }\n  const json = await response.json();\n  return json.url;\n}".to_string()
 }
 
 impl Default for AppSettings {
@@ -45,6 +53,8 @@ impl Default for AppSettings {
       document_list_mode: String::new(),
       language: "zh".to_string(),
       theme: "light".to_string(),
+      attachment_upload_enabled: false,
+      attachment_link_script: default_attachment_link_script(),
     }
   }
 }
@@ -103,6 +113,12 @@ fn merge_with_defaults(raw: AppSettings) -> AppSettings {
       defaults.theme
     } else {
       raw.theme
+    },
+    attachment_upload_enabled: raw.attachment_upload_enabled,
+    attachment_link_script: if raw.attachment_link_script.trim().is_empty() {
+      defaults.attachment_link_script
+    } else {
+      raw.attachment_link_script
     },
   }
 }

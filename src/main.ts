@@ -20,6 +20,7 @@ import {
 import {
   loadAppSettings,
   saveAppSettings,
+  DEFAULT_SETTINGS,
   type AppSettings,
   type ViewMode,
   type SidebarTab,
@@ -30,6 +31,11 @@ import {
   removeFromDocumentHistoryList,
   saveDocumentHistory,
 } from "./documentHistory";
+import {
+  buildAttachmentMarkdown,
+  isMarkdownFilePath,
+  resolveAttachmentLink,
+} from "./objectStorage";
 
 // ── State ──────────────────────────────────────────────
 let currentFilePath: string | null = null;
@@ -43,17 +49,7 @@ let scrollSyncLocked = false;
 let activeTocId: string | null = null;
 let tocHighlightRaf: number | null = null;
 let documentHistory: string[] = [];
-let appSettings: AppSettings = {
-  defaultViewMode: "split",
-  defaultScrollSyncLocked: false,
-  defaultSidebarVisible: false,
-  defaultSidebarTab: "files",
-  showSiblingDocuments: true,
-  showHistoryDocuments: false,
-  documentListSplitRatio: 0.5,
-  language: "zh",
-  theme: "light",
-};
+let appSettings: AppSettings = { ...DEFAULT_SETTINGS };
 
 // ── DOM refs ──────────────────────────────────────────
 const $ = <T extends HTMLElement>(sel: string) =>
@@ -931,6 +927,82 @@ function clearDropZoneHighlight() {
   $("#editor-area").classList.remove("drop-target-active");
 }
 
+function insertMarkdownAtCursor(markdown: string) {
+  const el = editor;
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const before = el.value.substring(0, start);
+  const after = el.value.substring(end);
+  const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
+  const insertion = `${needsLeadingNewline ? "\n" : ""}${markdown}\n`;
+  el.value = before + insertion + after;
+  const cursor = before.length + insertion.length;
+  el.selectionStart = cursor;
+  el.selectionEnd = cursor;
+  el.focus();
+  markModified();
+  updatePreview();
+}
+
+async function uploadDroppedAttachments(paths: string[]) {
+  for (const path of paths) {
+    const name = path.split(/[/\\]/).pop() || path;
+    showToast(t("toast.attachmentUploading", { name }));
+    try {
+      const url = await resolveAttachmentLink(path, appSettings.attachmentLinkScript);
+      insertMarkdownAtCursor(buildAttachmentMarkdown(name, url));
+      showToast(t("toast.attachmentUploaded", { name }));
+    } catch (e) {
+      const error = e instanceof Error ? e.message : String(e);
+      showToast(t("toast.attachmentUploadFailed", { error }));
+      console.error("附件上传失败:", e);
+    }
+  }
+}
+
+async function handleExternalFileDrop(paths: string[]) {
+  const regularFiles: string[] = [];
+  for (const path of paths) {
+    try {
+      if (await invoke<boolean>("is_regular_file", { path })) {
+        regularFiles.push(path);
+      }
+    } catch {
+      /* ignore invalid paths */
+    }
+  }
+
+  if (regularFiles.length === 0) {
+    showToast("请拖入可打开的文件");
+    return;
+  }
+
+  if (appSettings.attachmentUploadEnabled) {
+    const attachmentPaths = regularFiles.filter((path) => !isMarkdownFilePath(path));
+    const markdownPaths = regularFiles.filter((path) => isMarkdownFilePath(path));
+
+    if (attachmentPaths.length > 0) {
+      await uploadDroppedAttachments(attachmentPaths);
+    }
+
+    if (markdownPaths.length > 0) {
+      const opened = await openFileByPath(markdownPaths[0]);
+      if (opened) {
+        const name = markdownPaths[0].split(/[/\\]/).pop() || markdownPaths[0];
+        showToast(`已打开 ${name}`);
+      }
+    }
+    return;
+  }
+
+  const filePath = regularFiles[0];
+  const opened = await openFileByPath(filePath);
+  if (opened) {
+    const name = filePath.split(/[/\\]/).pop() || filePath;
+    showToast(`已打开 ${name}`);
+  }
+}
+
 // ── File Operations ────────────────────────────────────
 async function newFile() {
   if (isModified) {
@@ -1391,17 +1463,7 @@ async function initDragDrop() {
       const pos = payload.position.toLogical(factor);
       if (!isPointInDropZone(pos.x, pos.y)) return;
 
-      const filePath = await pickFirstOpenablePath(payload.paths);
-      if (!filePath) {
-        showToast("请拖入可打开的文件");
-        return;
-      }
-
-      const opened = await openFileByPath(filePath);
-      if (opened) {
-        const name = filePath.split(/[/\\]/).pop() || filePath;
-        showToast(`已打开 ${name}`);
-      }
+      await handleExternalFileDrop(payload.paths);
     } finally {
       externalDragActive = false;
       clearDropZoneHighlight();
@@ -1494,7 +1556,7 @@ function initSyncScroll() {
 }
 
 // ── Settings modal ─────────────────────────────────────
-type SettingsPanel = "general" | "appearance" | "system";
+type SettingsPanel = "general" | "attachments" | "appearance" | "system";
 
 function getWelcomeContent(): string {
   if (getLanguage() === "en") {
@@ -1691,6 +1753,36 @@ function syncSettingsFormFromState() {
     appSettings.showSiblingDocuments;
   $<HTMLInputElement>("#setting-show-history").checked =
     appSettings.showHistoryDocuments;
+
+  $<HTMLInputElement>("#setting-attachment-upload-enabled").checked =
+    appSettings.attachmentUploadEnabled;
+  $<HTMLTextAreaElement>("#setting-attachment-link-script").value =
+    appSettings.attachmentLinkScript;
+  updateAttachmentSettingsVisibility();
+}
+
+function readAttachmentSettingsFromForm(): Pick<
+  AppSettings,
+  "attachmentUploadEnabled" | "attachmentLinkScript"
+> {
+  return {
+    attachmentUploadEnabled: $<HTMLInputElement>(
+      "#setting-attachment-upload-enabled"
+    ).checked,
+    attachmentLinkScript: $<HTMLTextAreaElement>(
+      "#setting-attachment-link-script"
+    ).value,
+  };
+}
+
+function updateAttachmentSettingsVisibility() {
+  const enabled = appSettings.attachmentUploadEnabled;
+  $("#settings-attachment-fields")?.classList.toggle("hidden", !enabled);
+}
+
+async function persistAttachmentSettingsFromForm() {
+  await persistSettings(readAttachmentSettingsFromForm());
+  updateAttachmentSettingsVisibility();
 }
 
 async function persistSettings(patch: Partial<AppSettings>) {
@@ -1869,6 +1961,17 @@ function initSettings() {
         applyTheme(theme);
       });
     });
+
+  $<HTMLInputElement>("#setting-attachment-upload-enabled")?.addEventListener(
+    "change",
+    () => {
+      void persistAttachmentSettingsFromForm();
+    }
+  );
+
+  $("#setting-attachment-link-script")?.addEventListener("change", () => {
+    void persistAttachmentSettingsFromForm();
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && $("#settings-modal").classList.contains("open")) {

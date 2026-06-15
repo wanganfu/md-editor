@@ -15,6 +15,8 @@ export interface AppSettings {
   documentListSplitRatio: number;
   language: Language;
   theme: ThemeMode;
+  attachmentUploadEnabled: boolean;
+  attachmentLinkScript: string;
 }
 
 export const SETTINGS_CACHE_KEY = "md-editor:settings-cache";
@@ -29,6 +31,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   documentListSplitRatio: 0.5,
   language: "zh",
   theme: "light",
+  attachmentUploadEnabled: false,
+  attachmentLinkScript:
+    "async function getLink(fileName, filePath, fileBytes) {\n" +
+    "  const blob = new Blob([fileBytes]);\n" +
+    "  const formData = new FormData();\n" +
+    "  formData.append('file', blob, fileName);\n" +
+    "  const response = await fetch('https://api.example.com/upload', {\n" +
+    "    method: 'POST',\n" +
+    "    headers: { Token: 'your-token' },\n" +
+    "    body: formData,\n" +
+    "  });\n" +
+    "  if (!response.ok) {\n" +
+    "    throw new Error(`Upload failed: ${response.status}`);\n" +
+    "  }\n" +
+    "  const json = await response.json();\n" +
+    "  return json.url;\n" +
+    "}",
 };
 
 type LegacyAppSettings = Partial<AppSettings> & {
@@ -105,6 +124,12 @@ function normalizeSettings(raw: LegacyAppSettings): AppSettings {
       ? raw.language!
       : DEFAULT_SETTINGS.language,
     theme: isTheme(raw.theme ?? "") ? raw.theme! : DEFAULT_SETTINGS.theme,
+    attachmentUploadEnabled:
+      raw.attachmentUploadEnabled ?? DEFAULT_SETTINGS.attachmentUploadEnabled,
+    attachmentLinkScript:
+      raw.attachmentLinkScript?.trim()
+        ? raw.attachmentLinkScript
+        : DEFAULT_SETTINGS.attachmentLinkScript,
   };
 }
 

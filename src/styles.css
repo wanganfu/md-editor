@@ -735,3 +735,31 @@ html:not([data-sidebar="open"]) #sidebar {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.settings-text-input,
+.settings-textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.5rem;
+  background: var(--bg-input, var(--bg-toolbar));
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.settings-text-input:focus,
+.settings-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.settings-textarea {
+  min-height: 8rem;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.settings-attachment-fields.hidden {
+  display: none;
+}
