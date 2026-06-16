@@ -54,9 +54,9 @@ steps:
       - build-windows
       - build-linux
     settings:
-      base_url: https://git.anfu.me
       api_key:
         from_secret: gitea_token
+      base_url: https://git.anfu.me
       files:
         - dist/windows/*
         - dist/linux/*
