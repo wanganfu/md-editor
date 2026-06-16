@@ -34,13 +34,12 @@ test -n "$SETUP_EXE" || {
 }
 
 DIST_DIR="dist/windows"
+rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
-rm -rf "${DIST_DIR:?}"/*
 
 echo "开始重命名"
 mv "$SETUP_EXE" "$DIST_DIR/MDEditor-${VERSION}-windows-x64-setup.exe"
-cp "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" \
-  "$DIST_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"
+mv "src-tauri/target/x86_64-pc-windows-msvc/release/md-editor.exe" "$DIST_DIR/MDEditor-${VERSION}-windows-x64-portable.exe"
 
 echo "重命名结果"
 ls -al "$DIST_DIR"

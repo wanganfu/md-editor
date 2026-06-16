@@ -27,8 +27,8 @@ test -n "$DEB_SRC" && test -n "$RPM_SRC" || {
 }
 
 DIST_DIR="dist/linux"
+rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
-rm -rf "${DIST_DIR:?}"/*
 
 echo "开始重命名"
 mv "$DEB_SRC" "$DIST_DIR/MDEditor-${VERSION}-linux-amd64.deb"
