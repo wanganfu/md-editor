@@ -48,34 +48,25 @@ steps:
     commands:
       - bash ci/scripts/build-linux.sh
 
-  - name: upload-windows
-    image: &upload_image git.anfu.me/anfu/drone-upload:latest
-    pull: &upload_pull always
+  - name: gitea-release
+    image: plugins/gitea-release
     depends_on:
       - build-windows
-    environment: &upload_env
-      DOWNLOAD_SITE_URL: https://app.anfu.me
-      PROJECT_SLUG: MD Editor
-      ARTIFACT_UPLOAD_ALL: "true"
-      DRONE_UPLOAD_TOKEN:
-        from_secret: download_site_upload_token
-      ARTIFACT_DIR: dist/windows
-
-  - name: upload-linux
-    image: *upload_image
-    pull: *upload_pull
-    depends_on:
       - build-linux
-    environment:
-      <<: *upload_env
-      ARTIFACT_DIR: dist/linux
+    settings:
+      base_url: https://git.anfu.me
+      api_key:
+        from_secret: gitea_token
+      files:
+        - dist/windows/*
+        - dist/linux/*
+      file_exists: overwrite
 
   - name: notify-email
     image: git.anfu.me/anfu/docker-email-notify:latest
     pull: always
     depends_on:
-      - upload-windows
-      - upload-linux
+      - gitea-release
     when:
       status:
         - success
