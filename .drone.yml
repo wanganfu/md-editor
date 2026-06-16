@@ -59,8 +59,8 @@ steps:
         from_secret: gitea_token
       base_url: https://git.anfu.me
       files:
-        - dist/windows/*
-        - dist/linux/*
+        - artifacts/windows/*
+        - artifacts/linux/*
       file_exists: overwrite
 
   - name: notify-email

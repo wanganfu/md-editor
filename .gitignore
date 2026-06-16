@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 
+artifacts/
+
 # User-installed CLI plugins (binaries and secrets stay local)
 plugins/
 

@@ -31,7 +31,7 @@ test -n "$DMG_SRC" || {
   exit 1
 }
 
-DIST_DIR="dist/macos"
+DIST_DIR="artifacts/macos"
 mkdir -p "$DIST_DIR"
 rm -rf "${DIST_DIR:?}"/*
 

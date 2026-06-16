@@ -26,7 +26,7 @@ test -n "$DEB_SRC" && test -n "$RPM_SRC" || {
   exit 1
 }
 
-DIST_DIR="dist/linux"
+DIST_DIR="artifacts/linux"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 

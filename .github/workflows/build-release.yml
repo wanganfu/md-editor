@@ -47,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-dist
-          path: dist/windows/
+          path: artifacts/windows/
           if-no-files-found: error
           retention-days: 7
 
@@ -76,7 +76,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-dist
-          path: dist/linux/
+          path: artifacts/linux/
           if-no-files-found: error
           retention-days: 7
 
@@ -103,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dist
-          path: dist/macos/
+          path: artifacts/macos/
           if-no-files-found: error
           retention-days: 7
 
@@ -122,19 +122,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-dist
-          path: dist/windows
+          path: artifacts/windows
 
       - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
           name: linux-dist
-          path: dist/linux
+          path: artifacts/linux
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
           name: macos-dist
-          path: dist/macos
+          path: artifacts/macos
 
       - name: Resolve release tag
         id: release
@@ -151,9 +151,9 @@ jobs:
           prerelease: ${{ steps.release.outputs.prerelease }}
           generate_release_notes: true
           files: |
-            dist/windows/*
-            dist/linux/*
-            dist/macos/*
+            artifacts/windows/*
+            artifacts/linux/*
+            artifacts/macos/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

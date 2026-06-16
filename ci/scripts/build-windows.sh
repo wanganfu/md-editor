@@ -33,7 +33,7 @@ test -n "$SETUP_EXE" || {
   exit 1
 }
 
-DIST_DIR="dist/windows"
+DIST_DIR="artifacts/windows"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
