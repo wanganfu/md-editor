@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# User-installed CLI plugins (binaries and secrets stay local)
+plugins/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
