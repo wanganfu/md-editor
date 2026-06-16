@@ -22,11 +22,11 @@ volumes:
 
 steps:
   - name: build-windows
-    image: &build_image docker.1ms.run/library/node:20-bookworm
-    volumes: &build_volumes
+    image: docker.1ms.run/library/node:20-bookworm
+    volumes:
       - name: build-cache
         path: /cache
-    environment: &build_env
+    environment:
       CI: "true"
       CARGO_HOME: /cache/cargo
       RUSTUP_HOME: /cache/rustup
@@ -40,11 +40,20 @@ steps:
       - bash ci/scripts/build-windows.sh
 
   - name: build-linux
-    image: *build_image
-    volumes: *build_volumes
-    environment: *build_env
-    depends_on:
-      - build-windows
+    image: docker.1ms.run/library/node:20-bookworm
+    volumes:
+      - name: build-cache
+        path: /cache
+    environment:
+      CI: "true"
+      CARGO_HOME: /cache/cargo
+      RUSTUP_HOME: /cache/rustup
+      NPM_CONFIG_CACHE: /cache/npm
+      XDG_CACHE_HOME: /cache/xdg-cache
+      CARGO_INCREMENTAL: "0"
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: "sparse"
+      CARGO_NET_RETRY: "5"
+      DEBIAN_FRONTEND: noninteractive
     commands:
       - bash ci/scripts/build-linux.sh
 
