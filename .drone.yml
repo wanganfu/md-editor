@@ -49,7 +49,8 @@ steps:
       - bash ci/scripts/build-linux.sh
 
   - name: gitea-release
-    image: plugins/gitea-release
+    image: docker.1ms.run/plugins/gitea-release
+    pull: if-not-exists
     depends_on:
       - build-windows
       - build-linux
