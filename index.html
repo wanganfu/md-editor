@@ -118,6 +118,12 @@
       <main id="editor-area" class="flex-1 flex overflow-hidden relative">
         <!-- Toast -->
         <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg text-sm font-medium shadow-lg transition-all duration-300 opacity-0 translate-y-[-1rem] pointer-events-none" style="background:var(--accent);color:#fff"></div>
+        <div id="upload-overlay" class="upload-overlay hidden" aria-live="polite" aria-busy="true">
+          <div class="upload-overlay-content">
+            <div class="upload-spinner" aria-hidden="true"></div>
+            <span id="upload-overlay-text" class="upload-overlay-text" data-i18n="upload.inProgress">正在上传...</span>
+          </div>
+        </div>
         <section id="editor-pane" class="flex-1 flex flex-col" style="border-color:var(--border-pane)">
           <div class="flex items-center justify-between px-3 py-1 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
             <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)" data-i18n="pane.markdown">Markdown</span>
@@ -175,9 +181,9 @@
               <i class="fa-solid fa-sliders"></i>
               <span data-i18n="settings.nav.general">常规</span>
             </button>
-            <button type="button" class="settings-nav-item" data-settings-panel="attachments">
-              <i class="fa-solid fa-cloud-arrow-up"></i>
-              <span data-i18n="settings.nav.attachments">附件上传</span>
+            <button type="button" class="settings-nav-item" data-settings-panel="plugins">
+              <i class="fa-solid fa-puzzle-piece"></i>
+              <span data-i18n="settings.nav.plugins">插件</span>
             </button>
             <button type="button" class="settings-nav-item" data-settings-panel="appearance">
               <i class="fa-solid fa-palette"></i>
@@ -251,20 +257,22 @@
                 </div>
               </div>
             </section>
-            <section id="settings-panel-attachments" class="settings-panel hidden">
+            <section id="settings-panel-plugins" class="settings-panel hidden">
               <div class="settings-field">
                 <label class="settings-checkbox">
-                  <input type="checkbox" id="setting-attachment-upload-enabled" />
-                  <span data-i18n="settings.attachmentUpload.enabled">启用附件上传</span>
+                  <input type="checkbox" id="setting-plugin-upload-enabled" />
+                  <span data-i18n="settings.plugins.uploadEnabled">启用插件上传</span>
                 </label>
-                <p class="settings-desc" data-i18n="settings.attachmentUpload.enabled.desc">开启后，将附件拖入编辑区会调用下方脚本获取链接并插入；Markdown 文件仍按原逻辑打开。</p>
+                <p class="settings-desc" data-i18n="settings.plugins.uploadEnabled.desc">开启后，将附件拖入编辑区会通过所选上传插件获取链接并插入；Markdown 文件仍按原逻辑打开。</p>
               </div>
-              <div id="settings-attachment-fields" class="settings-attachment-fields hidden">
+              <div id="settings-plugin-fields" class="settings-plugin-fields hidden">
                 <div class="settings-field">
-                  <div class="settings-field-label" data-i18n="settings.attachmentUpload.linkScript">获取链接脚本 (getLink)</div>
-                  <p class="settings-desc" data-i18n="settings.attachmentUpload.linkScript.desc">定义 async function getLink(fileName, filePath, fileBytes)，自行完成上传逻辑并返回下载链接字符串。</p>
-                  <textarea id="setting-attachment-link-script" class="settings-textarea" rows="14" data-i18n-placeholder="settings.attachmentUpload.linkScript.placeholder"></textarea>
+                  <div class="settings-field-label" data-i18n="settings.plugins.uploadPlugin">上传插件</div>
+                  <p class="settings-desc" data-i18n="settings.plugins.uploadPlugin.desc">同类型上传插件只能启用一个。</p>
+                  <div id="settings-plugin-list" class="settings-plugin-list"></div>
+                  <p id="settings-plugin-empty" class="settings-desc settings-plugin-empty hidden" data-i18n="settings.plugins.empty">未在 plugins 目录发现上传插件。请将插件放入应用 plugins 目录后重新打开设置。</p>
                 </div>
+                <div id="settings-plugin-config" class="settings-plugin-config hidden"></div>
               </div>
             </section>
             <section id="settings-panel-appearance" class="settings-panel hidden">

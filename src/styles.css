@@ -418,6 +418,54 @@ html:not([data-sidebar="open"]) #sidebar {
   background: var(--accent-bg);
 }
 
+.upload-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-editor) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.upload-overlay.hidden {
+  display: none;
+}
+
+.upload-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0.75rem;
+  background: var(--bg-toolbar);
+  border: 1px solid var(--border-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  min-width: 10rem;
+}
+
+.upload-overlay-text {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.upload-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: upload-spin 0.8s linear infinite;
+}
+
+@keyframes upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Markdown Preview ────────────────────────────────── */
 #preview-pane {
   min-width: 0;
@@ -859,6 +907,48 @@ body.lightbox-open #toolbar-wrap {
   min-height: 8rem;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.settings-plugin-fields.hidden,
+.settings-plugin-config.hidden,
+.settings-plugin-empty.hidden {
+  display: none;
+}
+
+.settings-plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-plugin-card {
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.5rem;
+  background: var(--bg-toolbar);
+}
+
+.settings-plugin-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-plugin-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-plugin-card-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.125rem;
+}
+
+.settings-plugin-config {
+  margin-top: 0.5rem;
 }
 
 .settings-attachment-fields.hidden {

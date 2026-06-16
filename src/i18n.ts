@@ -62,7 +62,7 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.close": "关闭",
     "settings.nav.general": "常规",
     "settings.nav.appearance": "外观",
-    "settings.nav.attachments": "附件上传",
+    "settings.nav.plugins": "插件",
     "settings.nav.system": "系统",
     "settings.defaultViewMode": "默认打开查看方式",
     "settings.defaultViewMode.desc": "新建或启动时默认使用的编辑区布局。",
@@ -96,14 +96,17 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.fileAssoc.windowsOnly": "此功能仅支持 Windows",
     "settings.fileAssoc.register": "设为默认打开方式",
     "settings.fileAssoc.reRegister": "重新注册默认打开方式",
-    "settings.attachmentUpload.enabled": "启用附件上传",
-    "settings.attachmentUpload.enabled.desc":
-      "开启后，将附件拖入编辑区会调用下方脚本获取链接并插入；Markdown 文件仍按原逻辑打开。",
-    "settings.attachmentUpload.linkScript": "获取链接脚本 (getLink)",
-    "settings.attachmentUpload.linkScript.desc":
-      "定义 async function getLink(fileName, filePath, fileBytes)，自行完成上传并返回下载链接字符串。",
-    "settings.attachmentUpload.linkScript.placeholder":
-      "async function getLink(fileName, filePath, fileBytes) {\n  // 自定义上传逻辑\n  return 'https://example.com/file.png';\n}",
+    "settings.plugins.uploadEnabled": "启用插件上传",
+    "settings.plugins.uploadEnabled.desc":
+      "开启后，将附件拖入编辑区会通过所选上传插件获取链接并插入；Markdown 文件仍按原逻辑打开。",
+    "settings.plugins.uploadPlugin": "上传插件",
+    "settings.plugins.uploadPlugin.desc": "同类型上传插件只能启用一个。",
+    "settings.plugins.empty":
+      "未在 plugins 目录发现上传插件。请将插件放入应用 plugins 目录后重新打开设置。",
+    "settings.plugins.config": "插件配置",
+    "toast.pluginUploadNoPlugin": "请先在设置中选择一个上传插件",
+    "upload.inProgress": "正在上传 {name}...",
+    "upload.inProgressGeneric": "正在上传...",
     "toast.attachmentUploading": "正在上传 {name}...",
     "toast.attachmentUploaded": "已上传 {name}",
     "toast.attachmentUploadFailed": "上传失败: {error}",
@@ -178,7 +181,7 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.close": "Close",
     "settings.nav.general": "General",
     "settings.nav.appearance": "Appearance",
-    "settings.nav.attachments": "Attachments",
+    "settings.nav.plugins": "Plugins",
     "settings.nav.system": "System",
     "settings.defaultViewMode": "Default view mode",
     "settings.defaultViewMode.desc": "Layout used when the app starts or a new session begins.",
@@ -213,14 +216,17 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.fileAssoc.windowsOnly": "Available on Windows only",
     "settings.fileAssoc.register": "Set as default handler",
     "settings.fileAssoc.reRegister": "Re-register default handler",
-    "settings.attachmentUpload.enabled": "Enable attachment upload",
-    "settings.attachmentUpload.enabled.desc":
-      "When enabled, dropped attachments run the script below to get a link and insert it. Markdown files still open normally.",
-    "settings.attachmentUpload.linkScript": "Link script (getLink)",
-    "settings.attachmentUpload.linkScript.desc":
-      "Define async function getLink(fileName, filePath, fileBytes). Upload the file and return the download URL string.",
-    "settings.attachmentUpload.linkScript.placeholder":
-      "async function getLink(fileName, filePath, fileBytes) {\n  // custom upload logic\n  return 'https://example.com/file.png';\n}",
+    "settings.plugins.uploadEnabled": "Enable plugin upload",
+    "settings.plugins.uploadEnabled.desc":
+      "When enabled, dropped attachments use the selected upload plugin to get a link and insert it. Markdown files still open normally.",
+    "settings.plugins.uploadPlugin": "Upload plugin",
+    "settings.plugins.uploadPlugin.desc": "Only one upload plugin can be active at a time.",
+    "settings.plugins.empty":
+      "No upload plugins found in the plugins directory. Add plugins and reopen settings.",
+    "settings.plugins.config": "Plugin configuration",
+    "toast.pluginUploadNoPlugin": "Select an upload plugin in Settings first",
+    "upload.inProgress": "Uploading {name}...",
+    "upload.inProgressGeneric": "Uploading...",
     "toast.attachmentUploading": "Uploading {name}...",
     "toast.attachmentUploaded": "Uploaded {name}",
     "toast.attachmentUploadFailed": "Upload failed: {error}",

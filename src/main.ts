@@ -21,6 +21,7 @@ import {
   loadAppSettings,
   saveAppSettings,
   DEFAULT_SETTINGS,
+  getPluginConfig,
   type AppSettings,
   type ViewMode,
   type SidebarTab,
@@ -34,8 +35,8 @@ import {
 import {
   buildAttachmentMarkdown,
   isMarkdownFilePath,
-  resolveAttachmentLink,
 } from "./objectStorage";
+import { invokePluginUpload, listPlugins, type PluginInfo } from "./plugins";
 import { hashContent, morphPreviewHtml } from "./previewMorph";
 import {
   initPreviewInteractions,
@@ -506,10 +507,16 @@ function scrollToHeading(id: string, lineIndex: number) {
 async function refreshSidebar() {
   if (sidebarTab === "files") {
     await refreshFileList();
-    return;
+  } else {
+    renderTocListIfNeeded();
   }
 
-  renderPreview(true);
+  forceRefreshPreview();
+}
+
+function forceRefreshPreview() {
+  if (currentViewMode === "edit") return;
+  renderPreview(true, true);
 }
 
 // ── Preview update (debounced) ─────────────────────────
@@ -532,7 +539,8 @@ function updateMermaidTheme() {
 
 async function renderMermaidInPreview(
   container: HTMLElement,
-  generation: number
+  generation: number,
+  force = false
 ) {
   if (generation !== previewRenderGeneration) return;
 
@@ -545,12 +553,14 @@ async function renderMermaidInPreview(
 
   nodes.forEach((node) => {
     if (
+      !force &&
       node.hasAttribute("data-processed") &&
       node.getAttribute("data-mermaid-theme") === themeKey
     ) {
       return;
     }
     node.removeAttribute("data-processed");
+    node.removeAttribute("data-mermaid-theme");
     nodesToRun.push(node);
   });
 
@@ -571,7 +581,7 @@ function parsePreviewHtml(markdown: string): string {
   return addHeadingIds(marked.parse(markdown) as string);
 }
 
-function renderPreview(immediate = false) {
+function renderPreview(immediate = false, force = false) {
   const run = async () => {
     const generation = ++previewRenderGeneration;
     const syncRatio =
@@ -590,12 +600,24 @@ function renderPreview(immediate = false) {
     try {
       const html = parsePreviewHtml(editor.value);
       const mermaidThemeKey = isDark ? "dark" : "light";
-      morphPreviewHtml(preview, html, mermaidThemeKey);
-      mermaidRunChain = mermaidRunChain
-        .then(() => renderMermaidInPreview(preview, generation))
-        .catch((error) => {
+      if (force) {
+        preview.innerHTML = html;
+      } else {
+        morphPreviewHtml(preview, html, mermaidThemeKey);
+      }
+
+      const runMermaid = () =>
+        renderMermaidInPreview(preview, generation, force).catch((error) => {
           console.error("Mermaid 预览队列失败:", error);
         });
+
+      if (force) {
+        mermaidRunChain = runMermaid();
+      } else {
+        mermaidRunChain = mermaidRunChain.then(runMermaid).catch((error) => {
+          console.error("Mermaid 预览队列失败:", error);
+        });
+      }
       await mermaidRunChain;
 
       if (generation !== previewRenderGeneration) return;
@@ -1053,12 +1075,44 @@ function clearDropZoneHighlight() {
   $("#editor-area").classList.remove("drop-target-active");
 }
 
-function insertMarkdownAtCursor(markdown: string) {
+let editorInsertAnchor = 0;
+let activeUploadCount = 0;
+
+function captureEditorInsertAnchor() {
+  editorInsertAnchor = editor.selectionStart;
+}
+
+function getEditorInsertAnchor(): number {
+  return Math.max(0, Math.min(editorInsertAnchor, editor.value.length));
+}
+
+function showUploadOverlay(message?: string) {
+  activeUploadCount += 1;
+  const overlay = $("#upload-overlay");
+  const text = $("#upload-overlay-text");
+  if (text) {
+    text.textContent =
+      message ?? t("upload.inProgressGeneric");
+  }
+  overlay.classList.remove("hidden");
+}
+
+function hideUploadOverlay() {
+  activeUploadCount = Math.max(0, activeUploadCount - 1);
+  if (activeUploadCount === 0) {
+    $("#upload-overlay").classList.add("hidden");
+  }
+}
+
+function insertMarkdownAtPosition(markdown: string, position: number) {
+  if (currentViewMode === "preview") {
+    setViewMode("split");
+  }
+
   const el = editor;
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
+  const start = Math.max(0, Math.min(position, el.value.length));
   const before = el.value.substring(0, start);
-  const after = el.value.substring(end);
+  const after = el.value.substring(start);
   const needsLeadingNewline = before.length > 0 && !before.endsWith("\n");
   const insertion = `${needsLeadingNewline ? "\n" : ""}${markdown}\n`;
   el.value = before + insertion + after;
@@ -1066,22 +1120,35 @@ function insertMarkdownAtCursor(markdown: string) {
   el.selectionStart = cursor;
   el.selectionEnd = cursor;
   el.focus();
+  captureEditorInsertAnchor();
   markModified();
-  updatePreview();
+  renderPreview(true);
 }
 
 async function uploadDroppedAttachments(paths: string[]) {
+  const pluginId = appSettings.activeUploadPluginId;
+  if (!pluginId) {
+    showToast(t("toast.pluginUploadNoPlugin"));
+    return;
+  }
+
+  const pluginConfig = getPluginConfig(appSettings, pluginId);
+  let insertAt = getEditorInsertAnchor();
+
   for (const path of paths) {
     const name = path.split(/[/\\]/).pop() || path;
-    showToast(t("toast.attachmentUploading", { name }));
+    showUploadOverlay(t("upload.inProgress", { name }));
     try {
-      const url = await resolveAttachmentLink(path, appSettings.attachmentLinkScript);
-      insertMarkdownAtCursor(buildAttachmentMarkdown(name, url));
+      const url = await invokePluginUpload(pluginId, path, pluginConfig);
+      insertMarkdownAtPosition(buildAttachmentMarkdown(name, url), insertAt);
+      insertAt = editor.selectionStart;
       showToast(t("toast.attachmentUploaded", { name }));
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       showToast(t("toast.attachmentUploadFailed", { error }));
       console.error("附件上传失败:", e);
+    } finally {
+      hideUploadOverlay();
     }
   }
 }
@@ -1103,7 +1170,7 @@ async function handleExternalFileDrop(paths: string[]) {
     return;
   }
 
-  if (appSettings.attachmentUploadEnabled) {
+  if (appSettings.pluginUploadEnabled) {
     const attachmentPaths = regularFiles.filter((path) => !isMarkdownFilePath(path));
     const markdownPaths = regularFiles.filter((path) => isMarkdownFilePath(path));
 
@@ -1420,13 +1487,28 @@ function applyToolAction(action: string) {
 
 // ── Event Listeners ────────────────────────────────────
 editor.addEventListener("input", () => {
+  captureEditorInsertAnchor();
   markModified();
   updateToolbarDocumentTitle();
   updatePreview();
 });
 
-editor.addEventListener("keyup", updateStatus);
-editor.addEventListener("click", updateStatus);
+editor.addEventListener("keyup", () => {
+  captureEditorInsertAnchor();
+  updateStatus();
+});
+editor.addEventListener("click", () => {
+  captureEditorInsertAnchor();
+  updateStatus();
+});
+editor.addEventListener("mouseup", captureEditorInsertAnchor);
+editor.addEventListener("focus", captureEditorInsertAnchor);
+
+document.addEventListener("selectionchange", () => {
+  if (document.activeElement === editor) {
+    captureEditorInsertAnchor();
+  }
+});
 
 // Toolbar buttons
 document.querySelectorAll("[data-action]").forEach((btn) => {
@@ -1560,6 +1642,7 @@ async function initDragDrop() {
 
     if (payload.type === "enter") {
       externalDragActive = true;
+      captureEditorInsertAnchor();
       return;
     }
 
@@ -1590,6 +1673,7 @@ async function initDragDrop() {
       const pos = payload.position.toLogical(factor);
       if (!isPointInDropZone(pos.x, pos.y)) return;
 
+      captureEditorInsertAnchor();
       await handleExternalFileDrop(payload.paths);
     } finally {
       externalDragActive = false;
@@ -1699,7 +1783,9 @@ function initSyncScroll() {
 }
 
 // ── Settings modal ─────────────────────────────────────
-type SettingsPanel = "general" | "attachments" | "appearance" | "system";
+type SettingsPanel = "general" | "plugins" | "appearance" | "system";
+
+let discoveredPlugins: PluginInfo[] = [];
 
 function getWelcomeContent(): string {
   if (getLanguage() === "en") {
@@ -1898,35 +1984,196 @@ function syncSettingsFormFromState() {
   $<HTMLInputElement>("#setting-show-history").checked =
     appSettings.showHistoryDocuments;
 
-  $<HTMLInputElement>("#setting-attachment-upload-enabled").checked =
-    appSettings.attachmentUploadEnabled;
-  $<HTMLTextAreaElement>("#setting-attachment-link-script").value =
-    appSettings.attachmentLinkScript;
-  updateAttachmentSettingsVisibility();
+  $<HTMLInputElement>("#setting-plugin-upload-enabled").checked =
+    appSettings.pluginUploadEnabled;
+  void refreshPluginSettingsUi();
 }
 
-function readAttachmentSettingsFromForm(): Pick<
+async function ensureDiscoveredPlugins(): Promise<void> {
+  try {
+    discoveredPlugins = await listPlugins();
+  } catch (e) {
+    console.error("加载插件列表失败:", e);
+    discoveredPlugins = [];
+  }
+}
+
+function getUploadPlugins(): PluginInfo[] {
+  return discoveredPlugins.filter((plugin) => plugin.hasUploadAction);
+}
+
+function renderPluginList() {
+  const list = $("#settings-plugin-list");
+  const empty = $("#settings-plugin-empty");
+  if (!list) return;
+
+  const uploadPlugins = getUploadPlugins();
+  list.innerHTML = "";
+
+  if (empty) {
+    empty.classList.toggle("hidden", uploadPlugins.length > 0);
+  }
+
+  const activeId = appSettings.activeUploadPluginId;
+
+  for (const plugin of uploadPlugins) {
+    const label = document.createElement("label");
+    label.className = "settings-plugin-card settings-radio";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "setting-upload-plugin";
+    input.value = plugin.id;
+    input.checked = plugin.id === activeId;
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      void persistSettings({ activeUploadPluginId: plugin.id }).then(() => {
+        renderPluginConfigForm();
+        updatePluginSettingsVisibility();
+      });
+    });
+
+    const body = document.createElement("div");
+    body.className = "settings-plugin-card-body";
+
+    const title = document.createElement("div");
+    title.className = "settings-plugin-card-title";
+    title.textContent = plugin.name;
+    body.appendChild(title);
+
+    const metaParts = [plugin.version, plugin.author].filter(Boolean);
+    if (metaParts.length > 0) {
+      const meta = document.createElement("div");
+      meta.className = "settings-plugin-card-meta";
+      meta.textContent = metaParts.join(" · ");
+      body.appendChild(meta);
+    }
+
+    if (plugin.description) {
+      const desc = document.createElement("p");
+      desc.className = "settings-desc";
+      desc.textContent = plugin.description;
+      body.appendChild(desc);
+    }
+
+    label.appendChild(input);
+    label.appendChild(body);
+    list.appendChild(label);
+  }
+
+  if (!activeId && uploadPlugins.length === 1) {
+    const onlyPlugin = uploadPlugins[0];
+    void persistSettings({ activeUploadPluginId: onlyPlugin.id }).then(() => {
+      const radio = list.querySelector<HTMLInputElement>(
+        `input[name="setting-upload-plugin"][value="${onlyPlugin.id}"]`
+      );
+      if (radio) radio.checked = true;
+      renderPluginConfigForm();
+      updatePluginSettingsVisibility();
+    });
+  }
+}
+
+function renderPluginConfigForm() {
+  const container = $("#settings-plugin-config");
+  if (!container) return;
+
+  const pluginId = appSettings.activeUploadPluginId;
+  const plugin = getUploadPlugins().find((item) => item.id === pluginId);
+  container.innerHTML = "";
+
+  if (!plugin) {
+    container.classList.add("hidden");
+    return;
+  }
+
+  container.classList.remove("hidden");
+
+  const heading = document.createElement("div");
+  heading.className = "settings-field-label";
+  heading.textContent = t("settings.plugins.config");
+  container.appendChild(heading);
+
+  const config = getPluginConfig(appSettings, plugin.id);
+
+  for (const field of plugin.configFields) {
+    const fieldWrap = document.createElement("div");
+    fieldWrap.className = "settings-field";
+
+    const label = document.createElement("div");
+    label.className = "settings-field-label";
+    label.textContent = field.label;
+    fieldWrap.appendChild(label);
+
+    const input = document.createElement("input");
+    input.className = "settings-text-input";
+    input.type = field.sensitive ? "password" : "text";
+    input.value = config[field.key] ?? "";
+    input.dataset.pluginField = field.key;
+    if (!field.optional) {
+      input.required = true;
+    }
+    input.addEventListener("change", () => {
+      persistActivePluginConfigFromForm();
+    });
+    fieldWrap.appendChild(input);
+    container.appendChild(fieldWrap);
+  }
+}
+
+function persistActivePluginConfigFromForm() {
+  const pluginId = appSettings.activeUploadPluginId;
+  if (!pluginId) return;
+
+  const plugin = getUploadPlugins().find((item) => item.id === pluginId);
+  if (!plugin) return;
+
+  const config: Record<string, string> = {};
+  for (const field of plugin.configFields) {
+    const input = document.querySelector<HTMLInputElement>(
+      `#settings-plugin-config [data-plugin-field="${field.key}"]`
+    );
+    if (input) {
+      config[field.key] = input.value;
+    }
+  }
+
+  void persistSettings({
+    pluginConfigs: {
+      ...appSettings.pluginConfigs,
+      [pluginId]: config,
+    },
+  });
+}
+
+function updatePluginSettingsVisibility() {
+  const enabled = appSettings.pluginUploadEnabled;
+  $("#settings-plugin-fields")?.classList.toggle("hidden", !enabled);
+  if (enabled) {
+    renderPluginConfigForm();
+  }
+}
+
+async function refreshPluginSettingsUi() {
+  await ensureDiscoveredPlugins();
+  renderPluginList();
+  updatePluginSettingsVisibility();
+}
+
+function readPluginSettingsFromForm(): Pick<
   AppSettings,
-  "attachmentUploadEnabled" | "attachmentLinkScript"
+  "pluginUploadEnabled"
 > {
   return {
-    attachmentUploadEnabled: $<HTMLInputElement>(
-      "#setting-attachment-upload-enabled"
+    pluginUploadEnabled: $<HTMLInputElement>(
+      "#setting-plugin-upload-enabled"
     ).checked,
-    attachmentLinkScript: $<HTMLTextAreaElement>(
-      "#setting-attachment-link-script"
-    ).value,
   };
 }
 
-function updateAttachmentSettingsVisibility() {
-  const enabled = appSettings.attachmentUploadEnabled;
-  $("#settings-attachment-fields")?.classList.toggle("hidden", !enabled);
-}
-
-async function persistAttachmentSettingsFromForm() {
-  await persistSettings(readAttachmentSettingsFromForm());
-  updateAttachmentSettingsVisibility();
+async function persistPluginSettingsFromForm() {
+  await persistSettings(readPluginSettingsFromForm());
+  updatePluginSettingsVisibility();
 }
 
 async function persistSettings(patch: Partial<AppSettings>) {
@@ -1971,6 +2218,10 @@ function setSettingsPanel(panel: SettingsPanel) {
     section.classList.toggle("active", id === panel);
     section.classList.toggle("hidden", id !== panel);
   });
+
+  if (panel === "plugins") {
+    void refreshPluginSettingsUi();
+  }
 }
 
 async function updateSettingsDefaultStatus() {
@@ -2000,6 +2251,7 @@ function openSettings() {
   modal.classList.remove("hidden");
   modal.classList.add("open");
   syncSettingsFormFromState();
+  void refreshPluginSettingsUi();
   updateSettingsDefaultStatus();
 }
 
@@ -2106,16 +2358,12 @@ function initSettings() {
       });
     });
 
-  $<HTMLInputElement>("#setting-attachment-upload-enabled")?.addEventListener(
+  $<HTMLInputElement>("#setting-plugin-upload-enabled")?.addEventListener(
     "change",
     () => {
-      void persistAttachmentSettingsFromForm();
+      void persistPluginSettingsFromForm();
     }
   );
-
-  $("#setting-attachment-link-script")?.addEventListener("change", () => {
-    void persistAttachmentSettingsFromForm();
-  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && $("#settings-modal").classList.contains("open")) {

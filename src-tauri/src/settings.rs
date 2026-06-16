@@ -23,6 +23,12 @@ pub struct AppSettings {
   pub language: String,
   pub theme: String,
   #[serde(default)]
+  pub plugin_upload_enabled: bool,
+  #[serde(default)]
+  pub active_upload_plugin_id: Option<String>,
+  #[serde(default)]
+  pub plugin_configs: std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+  #[serde(default)]
   pub attachment_upload_enabled: bool,
   #[serde(default = "default_attachment_link_script")]
   pub attachment_link_script: String,
@@ -37,7 +43,7 @@ fn default_split_ratio() -> f64 {
 }
 
 fn default_attachment_link_script() -> String {
-  "async function getLink(fileName, filePath, fileBytes) {\n  const blob = new Blob([fileBytes]);\n  const formData = new FormData();\n  formData.append('file', blob, fileName);\n  const response = await fetch('https://api.example.com/upload', {\n    method: 'POST',\n    headers: { Token: 'your-token' },\n    body: formData,\n  });\n  if (!response.ok) {\n    throw new Error(`Upload failed: ${response.status}`);\n  }\n  const json = await response.json();\n  return json.url;\n}".to_string()
+  String::new()
 }
 
 impl Default for AppSettings {
@@ -53,8 +59,11 @@ impl Default for AppSettings {
       document_list_mode: String::new(),
       language: "zh".to_string(),
       theme: "light".to_string(),
+      plugin_upload_enabled: false,
+      active_upload_plugin_id: None,
+      plugin_configs: std::collections::HashMap::new(),
       attachment_upload_enabled: false,
-      attachment_link_script: default_attachment_link_script(),
+      attachment_link_script: String::new(),
     }
   }
 }
@@ -83,9 +92,22 @@ fn resolve_document_list_flags(raw: &AppSettings) -> (bool, bool) {
   (raw.show_sibling_documents, raw.show_history_documents)
 }
 
+fn migrate_legacy_attachment_settings(raw: &AppSettings) -> (bool, Option<String>) {
+  if raw.plugin_upload_enabled || raw.active_upload_plugin_id.is_some() {
+    return (raw.plugin_upload_enabled, raw.active_upload_plugin_id.clone());
+  }
+
+  if raw.attachment_upload_enabled {
+    return (true, None);
+  }
+
+  (false, None)
+}
+
 fn merge_with_defaults(raw: AppSettings) -> AppSettings {
   let defaults = AppSettings::default();
   let (show_sibling_documents, show_history_documents) = resolve_document_list_flags(&raw);
+  let (plugin_upload_enabled, active_upload_plugin_id) = migrate_legacy_attachment_settings(&raw);
 
   AppSettings {
     default_view_mode: if raw.default_view_mode.is_empty() {
@@ -114,12 +136,11 @@ fn merge_with_defaults(raw: AppSettings) -> AppSettings {
     } else {
       raw.theme
     },
+    plugin_upload_enabled,
+    active_upload_plugin_id,
+    plugin_configs: raw.plugin_configs,
     attachment_upload_enabled: raw.attachment_upload_enabled,
-    attachment_link_script: if raw.attachment_link_script.trim().is_empty() {
-      defaults.attachment_link_script
-    } else {
-      raw.attachment_link_script
-    },
+    attachment_link_script: raw.attachment_link_script,
   }
 }
 

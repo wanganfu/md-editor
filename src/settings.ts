@@ -15,8 +15,9 @@ export interface AppSettings {
   documentListSplitRatio: number;
   language: Language;
   theme: ThemeMode;
-  attachmentUploadEnabled: boolean;
-  attachmentLinkScript: string;
+  pluginUploadEnabled: boolean;
+  activeUploadPluginId: string | null;
+  pluginConfigs: Record<string, Record<string, string>>;
 }
 
 export const SETTINGS_CACHE_KEY = "md-editor:settings-cache";
@@ -31,27 +32,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   documentListSplitRatio: 0.5,
   language: "zh",
   theme: "light",
-  attachmentUploadEnabled: false,
-  attachmentLinkScript:
-    "async function getLink(fileName, filePath, fileBytes) {\n" +
-    "  const blob = new Blob([fileBytes]);\n" +
-    "  const formData = new FormData();\n" +
-    "  formData.append('file', blob, fileName);\n" +
-    "  const response = await fetch('https://api.example.com/upload', {\n" +
-    "    method: 'POST',\n" +
-    "    headers: { Token: 'your-token' },\n" +
-    "    body: formData,\n" +
-    "  });\n" +
-    "  if (!response.ok) {\n" +
-    "    throw new Error(`Upload failed: ${response.status}`);\n" +
-    "  }\n" +
-    "  const json = await response.json();\n" +
-    "  return json.url;\n" +
-    "}",
+  pluginUploadEnabled: false,
+  activeUploadPluginId: null,
+  pluginConfigs: {},
 };
 
 type LegacyAppSettings = Partial<AppSettings> & {
   documentListMode?: string;
+  attachmentUploadEnabled?: boolean;
+  attachmentLinkScript?: string;
 };
 
 function isViewMode(value: string): value is ViewMode {
@@ -101,8 +90,44 @@ function resolveDocumentListFlags(raw: LegacyAppSettings): {
   };
 }
 
+function migrateLegacyAttachmentSettings(raw: LegacyAppSettings): {
+  pluginUploadEnabled: boolean;
+  activeUploadPluginId: string | null;
+} {
+  if (
+    raw.pluginUploadEnabled !== undefined ||
+    raw.activeUploadPluginId !== undefined
+  ) {
+    return {
+      pluginUploadEnabled:
+        raw.pluginUploadEnabled ?? DEFAULT_SETTINGS.pluginUploadEnabled,
+      activeUploadPluginId:
+        raw.activeUploadPluginId ?? DEFAULT_SETTINGS.activeUploadPluginId,
+    };
+  }
+
+  if (raw.attachmentUploadEnabled) {
+    return { pluginUploadEnabled: true, activeUploadPluginId: null };
+  }
+
+  return {
+    pluginUploadEnabled: DEFAULT_SETTINGS.pluginUploadEnabled,
+    activeUploadPluginId: DEFAULT_SETTINGS.activeUploadPluginId,
+  };
+}
+
+function normalizePluginConfigs(
+  raw: LegacyAppSettings
+): Record<string, Record<string, string>> {
+  if (raw.pluginConfigs && typeof raw.pluginConfigs === "object") {
+    return raw.pluginConfigs;
+  }
+  return DEFAULT_SETTINGS.pluginConfigs;
+}
+
 function normalizeSettings(raw: LegacyAppSettings): AppSettings {
   const documentFlags = resolveDocumentListFlags(raw);
+  const pluginFlags = migrateLegacyAttachmentSettings(raw);
 
   return {
     defaultViewMode: isViewMode(raw.defaultViewMode ?? "")
@@ -124,12 +149,9 @@ function normalizeSettings(raw: LegacyAppSettings): AppSettings {
       ? raw.language!
       : DEFAULT_SETTINGS.language,
     theme: isTheme(raw.theme ?? "") ? raw.theme! : DEFAULT_SETTINGS.theme,
-    attachmentUploadEnabled:
-      raw.attachmentUploadEnabled ?? DEFAULT_SETTINGS.attachmentUploadEnabled,
-    attachmentLinkScript:
-      raw.attachmentLinkScript?.trim()
-        ? raw.attachmentLinkScript
-        : DEFAULT_SETTINGS.attachmentLinkScript,
+    pluginUploadEnabled: pluginFlags.pluginUploadEnabled,
+    activeUploadPluginId: pluginFlags.activeUploadPluginId,
+    pluginConfigs: normalizePluginConfigs(raw),
   };
 }
 
@@ -170,4 +192,25 @@ export async function saveAppSettings(settings: AppSettings): Promise<void> {
   const normalized = normalizeSettings(settings);
   cacheAppSettings(normalized);
   await invoke("save_app_settings", { settings: normalized });
+}
+
+export function getPluginConfig(
+  settings: AppSettings,
+  pluginId: string
+): Record<string, string> {
+  return { ...(settings.pluginConfigs[pluginId] ?? {}) };
+}
+
+export function setPluginConfig(
+  settings: AppSettings,
+  pluginId: string,
+  config: Record<string, string>
+): AppSettings {
+  return {
+    ...settings,
+    pluginConfigs: {
+      ...settings.pluginConfigs,
+      [pluginId]: { ...config },
+    },
+  };
 }

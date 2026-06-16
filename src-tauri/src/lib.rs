@@ -1,5 +1,6 @@
 mod file_assoc;
 mod document_history;
+mod plugins;
 mod settings;
 
 use std::fs;
@@ -160,7 +161,9 @@ pub fn run() {
       settings::get_app_settings,
       settings::save_app_settings,
       document_history::get_document_history,
-      document_history::save_document_history
+      document_history::save_document_history,
+      plugins::list_plugins,
+      plugins::invoke_plugin_action
     ])
     .build(tauri::generate_context!())
     .expect("error while running tauri application")
