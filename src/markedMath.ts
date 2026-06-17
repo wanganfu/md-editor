@@ -1,11 +1,5 @@
-import katex from "katex";
 import type { MarkedExtension } from "marked";
-
-const KATEX_OPTIONS = {
-  throwOnError: false,
-  strict: "ignore" as const,
-  trust: true,
-};
+import { renderKatexCached } from "./katexCache";
 
 const BLOCK_PLACEHOLDER = "XMDMATHBLOCK";
 const INLINE_PLACEHOLDER = "XMDMATHINLINE";
@@ -31,17 +25,11 @@ const VOID_HTML_ELEMENTS = new Set([
 ]);
 
 function renderInlineMath(text: string): string {
-  return katex.renderToString(text.trim(), {
-    ...KATEX_OPTIONS,
-    displayMode: false,
-  });
+  return renderKatexCached(text, false);
 }
 
 function renderDisplayMath(text: string): string {
-  return katex.renderToString(text.trim(), {
-    ...KATEX_OPTIONS,
-    displayMode: true,
-  });
+  return renderKatexCached(text, true);
 }
 
 function stashBlock(html: string): string {

@@ -52,12 +52,8 @@ function replaceRange(
   editor.selectionEnd = selectionEnd ?? cursor;
 }
 
-function applyAndNotify(
-  editor: HTMLTextAreaElement,
-  onApplied: () => void
-): void {
+function applyAndNotify(onApplied: () => void): void {
   onApplied();
-  editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 const PAIR_OPEN_TO_CLOSE: Record<string, string> = {
@@ -79,7 +75,7 @@ export function initEditorAutocomplete(
   let isComposing = false;
 
   function notify() {
-    applyAndNotify(editor, onApplied);
+    applyAndNotify(onApplied);
   }
 
   function insertPair(

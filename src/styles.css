@@ -506,8 +506,7 @@ html:not([data-sidebar="open"]) #sidebar {
 
 #preview {
   min-width: 0;
-  overflow-x: clip;
-  contain: content;
+  /* 勿用 overflow-x: clip / contain: content，会裁切 ol 列表序号 */
 }
 
 #preview,
@@ -521,13 +520,65 @@ html:not([data-sidebar="open"]) #sidebar {
 }
 
 .md-preview { color: var(--text-preview); line-height: 1.75; }
+
+.md-block {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 80px;
+  overflow: visible;
+}
+
 .md-preview h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border-primary); color: var(--text-preview-heading); }
 .md-preview h2 { font-size: 1.25rem; font-weight: 700; margin: 1.25rem 0 0.5rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border-secondary); color: var(--text-preview-heading); }
 .md-preview h3 { font-size: 1.125rem; font-weight: 600; margin: 1rem 0 0.5rem; color: var(--text-preview-heading); }
 .md-preview h4 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--text-preview-heading); }
 .md-preview p { margin: 0.5rem 0; }
-.md-preview ul, .md-preview ol { margin: 0.5rem 0; padding-left: 1.5rem; }
-.md-preview ul { list-style: disc; } .md-preview ol { list-style: decimal; }
+.md-preview ul {
+  margin: 0.5rem 0;
+  padding-left: 2em;
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+/* 用计数器绘制序号；--md-ol-ch 由 JS 按最大序号位数设置 */
+.md-preview ol {
+  list-style: none;
+  counter-reset: md-ol;
+  --md-ol-ch: 1;
+  margin: 0.5rem 0;
+  padding-left: 0;
+}
+
+.md-preview ol[start] {
+  counter-reset: md-ol calc(attr(start number, 1) - 1);
+}
+
+.md-preview ol > li {
+  counter-increment: md-ol;
+  position: relative;
+  margin: 0.25rem 0;
+  padding-left: calc(var(--md-ol-ch) * 1ch + 0.65em);
+}
+
+.md-preview ol > li::before {
+  content: counter(md-ol) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--md-ol-ch) * 1ch);
+  padding-right: 0.35em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+.md-preview ol ol {
+  counter-reset: md-ol;
+}
+
+.md-preview ol ol[start] {
+  counter-reset: md-ol calc(attr(start number, 1) - 1);
+}
+
 .md-preview li { margin: 0.25rem 0; }
 .md-preview blockquote { border-left: 4px solid var(--text-preview-blockquote-border); padding-left: 1rem; margin: 0.75rem 0; color: var(--text-preview-blockquote); }
 .md-preview code { background: var(--text-preview-code-bg); color: var(--text-preview-code); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.875rem; }

@@ -1,11 +1,8 @@
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { marked } from "marked";
-import mermaid from "mermaid";
 import "katex/dist/katex.min.css";
-import { markedMathExtension } from "./markedMath";
 import {
   markAppReady,
   syncBootstrapSettingsToDocument,
@@ -37,11 +34,17 @@ import {
   isMarkdownFilePath,
 } from "./objectStorage";
 import { invokePluginUpload, listPlugins, type PluginInfo } from "./plugins";
-import { hashContent, morphPreviewHtml } from "./previewMorph";
 import {
   initPreviewInteractions,
   refreshPreviewInteractionLabels,
 } from "./previewInteractions";
+import {
+  PreviewRenderer,
+  getResourceBaseDirFromFilePath,
+  resolvePreviewResourceUrl,
+} from "./previewRenderer";
+import { resolveResourcePath } from "./markdownPipeline";
+import { clearKatexCache } from "./katexCache";
 import { initBlockBrowserShortcuts } from "./blockBrowserShortcuts";
 import { initEditorAutocomplete } from "./editorAutocomplete";
 import {
@@ -96,31 +99,6 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// ── Marked config ──────────────────────────────────────
-marked.setOptions({ breaks: true, gfm: true });
-
-marked.use(markedMathExtension());
-
-let previewMermaidBlockIndex = 0;
-
-marked.use({
-  renderer: {
-    code({ text, lang }) {
-      if (lang === "mermaid") {
-        const index = previewMermaidBlockIndex++;
-        const source = text.trim();
-        const contentKey = hashContent(source);
-        return `<div class="mermaid" id="mermaid-block-${index}" data-mermaid-key="${contentKey}">${escapeHtml(source)}</div>`;
-      }
-
-      const langClass = lang
-        ? ` class="language-${escapeHtml(lang)}"`
-        : "";
-      return `<pre><code${langClass}>${escapeHtml(text)}\n</code></pre>\n`;
-    },
-  },
-});
-
 const REMOTE_URL_RE =
   /^(https?:|\/\/|data:|mailto:|javascript:|#|asset:|blob:|https:\/\/asset\.)/i;
 
@@ -128,100 +106,25 @@ function isRemoteResourceUrl(url: string): boolean {
   return REMOTE_URL_RE.test(url);
 }
 
-function joinPaths(baseDir: string, relative: string): string {
-  const normalizedBase = baseDir.replace(/\\/g, "/");
-  const isWin = /^[a-zA-Z]:\//.test(normalizedBase);
-  const isUnixAbsolute = normalizedBase.startsWith("/");
-  const parts = baseDir.split(/[/\\]/).filter(Boolean);
-
-  for (const segment of relative.replace(/\\/g, "/").split("/")) {
-    if (!segment || segment === ".") continue;
-    if (segment === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(segment);
-  }
-
-  if (isWin && parts[0]?.endsWith(":")) {
-    return parts.join("\\");
-  }
-  if (isUnixAbsolute) {
-    return "/" + parts.join("/");
-  }
-  return parts.join(isWin ? "\\" : "/");
-}
-
 function resolveLocalFilePath(href: string): string | null {
   if (!href || isRemoteResourceUrl(href)) return null;
-  if (!currentFilePath) return null;
+  const baseDir = getResourceBaseDirFromFilePath(currentFilePath);
+  if (!baseDir) return null;
 
   try {
-    const decoded = decodeURIComponent(href.trim());
+    const absolute = resolveResourcePath(href, baseDir);
     const isAbsolute =
-      /^[a-zA-Z]:[/\\]/.test(decoded) ||
-      (decoded.startsWith("/") && !decoded.startsWith("//"));
-
-    return isAbsolute
-      ? decoded
-      : joinPaths(
-          currentFilePath.replace(/[/\\][^/\\]+$/, ""),
-          decoded
-        );
+      /^[a-zA-Z]:[/\\]/.test(absolute) ||
+      (absolute.startsWith("/") && !absolute.startsWith("//"));
+    return isAbsolute ? absolute : null;
   } catch {
     return null;
   }
 }
 
 function resolveResourceUrl(href: string): string {
-  if (!href || isRemoteResourceUrl(href)) return href;
-  if (!currentFilePath) return href;
-
-  try {
-    const decoded = decodeURIComponent(href.trim());
-    const isAbsolute =
-      /^[a-zA-Z]:[/\\]/.test(decoded) ||
-      (decoded.startsWith("/") && !decoded.startsWith("//"));
-
-    const absolute = isAbsolute
-      ? decoded
-      : joinPaths(
-          currentFilePath.replace(/[/\\][^/\\]+$/, ""),
-          decoded
-        );
-
-    return convertFileSrc(absolute);
-  } catch {
-    return href;
-  }
+  return resolvePreviewResourceUrl(href, currentFilePath);
 }
-
-function rewriteLocalResourceUrls(html: string): string {
-  return html
-    .replace(
-      /(<a\b[^>]*?\shref=)(["'])(?!#)([^"']+)\2/gi,
-      (_match, prefix, quote, href) =>
-        `${prefix}${quote}${resolveResourceUrl(href)}${quote}`
-    )
-    .replace(
-      /(<img\b[^>]*?\ssrc=)(["'])([^"']+)\2/gi,
-      (_match, prefix, quote, src) =>
-        `${prefix}${quote}${resolveResourceUrl(src)}${quote}`
-    )
-    .replace(
-      /(<(?:video|audio|source)\b[^>]*?\ssrc=)(["'])([^"']+)\2/gi,
-      (_match, prefix, quote, src) =>
-        `${prefix}${quote}${resolveResourceUrl(src)}${quote}`
-    );
-}
-
-marked.use({
-  hooks: {
-    postprocess(html) {
-      return rewriteLocalResourceUrls(html);
-    },
-  },
-});
 
 interface TocEntry {
   level: number;
@@ -249,15 +152,6 @@ function extractHeadings(text: string): TocEntry[] {
   }
 
   return items;
-}
-
-function addHeadingIds(html: string): string {
-  let index = 0;
-  return html.replace(/<h([1-6])(\s[^>]*)?>/gi, (match, _level, attrs = "") => {
-    if (/\bid\s*=/.test(attrs)) return match;
-    const id = `heading-${index++}`;
-    return `<h${_level} id="${id}"${attrs}>`;
-  });
 }
 
 function renderFileListEmpty(list: HTMLElement, message: string, icon = "fa-folder-open") {
@@ -528,62 +422,16 @@ function forceRefreshPreview() {
   renderPreview(true, true);
 }
 
-// ── Preview update (debounced) ─────────────────────────
-let previewTimer: ReturnType<typeof setTimeout> | null = null;
-let previewRenderGeneration = 0;
-let mermaidRunChain: Promise<void> = Promise.resolve();
-let mermaidThemeKey: string | null = null;
+// ── Preview update (debounced, worker + block incremental) ──
+let previewRenderer: PreviewRenderer;
 
-function updateMermaidTheme() {
-  const themeKey = isDark ? "dark" : "light";
-  if (mermaidThemeKey === themeKey) return;
+type PendingPreviewScroll = {
+  syncRatio: number | null;
+  previewScrollRatio: number | null;
+  useEditorScrollSync: boolean;
+};
 
-  mermaidThemeKey = themeKey;
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: isDark ? "dark" : "default",
-    securityLevel: "loose",
-  });
-}
-
-async function renderMermaidInPreview(
-  container: HTMLElement,
-  generation: number,
-  force = false
-) {
-  if (generation !== previewRenderGeneration) return;
-
-  const nodes = container.querySelectorAll<HTMLElement>(".mermaid");
-  if (nodes.length === 0) return;
-
-  updateMermaidTheme();
-  const themeKey = mermaidThemeKey ?? (isDark ? "dark" : "light");
-  const nodesToRun: HTMLElement[] = [];
-
-  nodes.forEach((node) => {
-    if (
-      !force &&
-      node.hasAttribute("data-processed") &&
-      node.getAttribute("data-mermaid-theme") === themeKey
-    ) {
-      return;
-    }
-    node.removeAttribute("data-processed");
-    node.removeAttribute("data-mermaid-theme");
-    nodesToRun.push(node);
-  });
-
-  if (nodesToRun.length === 0) return;
-
-  try {
-    await mermaid.run({ nodes: nodesToRun, suppressErrors: true });
-    nodesToRun.forEach((node) => {
-      node.setAttribute("data-mermaid-theme", themeKey);
-    });
-  } catch (error) {
-    console.error("Mermaid 渲染失败:", error);
-  }
-}
+let pendingPreviewScroll: PendingPreviewScroll | null = null;
 
 function setPreviewLoading(loading: boolean) {
   previewLoading?.classList.toggle("hidden", !loading);
@@ -592,9 +440,29 @@ function setPreviewLoading(loading: boolean) {
   }
 }
 
-function parsePreviewHtml(markdown: string): string {
-  previewMermaidBlockIndex = 0;
-  return addHeadingIds(marked.parse(markdown) as string);
+function handlePreviewAfterRender() {
+  scrollSyncSuspended = false;
+
+  if (pendingPreviewScroll?.useEditorScrollSync) {
+    markScrollSyncSource("editor");
+    setScrollByRatio(
+      preview,
+      pendingPreviewScroll.syncRatio ?? getScrollRatio(editor)
+    );
+  } else if (pendingPreviewScroll?.previewScrollRatio !== null) {
+    setScrollByRatio(preview, pendingPreviewScroll!.previewScrollRatio!);
+  }
+  pendingPreviewScroll = null;
+
+  setPreviewLoading(false);
+
+  if (sidebarTab === "toc") {
+    renderTocListIfNeeded();
+  } else {
+    scheduleTocHighlightUpdate();
+  }
+
+  updateStatus();
 }
 
 function renderPreview(
@@ -602,82 +470,37 @@ function renderPreview(
   force = false,
   resetScroll = false
 ) {
-  const run = async () => {
-    const generation = ++previewRenderGeneration;
-    const syncRatio =
-      scrollSyncLocked && currentViewMode === "split" && !resetScroll
-        ? getScrollRatio(editor)
-        : null;
-    const preservePreviewScroll =
-      currentViewMode === "split" && !scrollSyncLocked && !resetScroll;
-    const previewScrollRatio = preservePreviewScroll
-      ? getScrollRatio(preview)
+  if (currentViewMode === "edit") return;
+  if (!previewRenderer) return;
+
+  const syncRatio =
+    scrollSyncLocked && currentViewMode === "split" && !resetScroll
+      ? getScrollRatio(editor)
       : null;
-    const useEditorScrollSync =
-      scrollSyncLocked && currentViewMode === "split" && !resetScroll;
+  const preservePreviewScroll =
+    currentViewMode === "split" && !scrollSyncLocked && !resetScroll;
+  const previewScrollRatio = preservePreviewScroll
+    ? getScrollRatio(preview)
+    : null;
+  const useEditorScrollSync =
+    scrollSyncLocked && currentViewMode === "split" && !resetScroll;
 
-    scrollSyncSuspended = true;
-    try {
-      const html = parsePreviewHtml(editor.value);
-      const mermaidThemeKey = isDark ? "dark" : "light";
-      if (force) {
-        preview.innerHTML = html;
-      } else {
-        morphPreviewHtml(preview, html, mermaidThemeKey);
-      }
-
-      if (resetScroll) {
-        editor.scrollTop = 0;
-        preview.scrollTop = 0;
-      }
-
-      setPreviewLoading(false);
-
-      const runMermaid = () =>
-        renderMermaidInPreview(preview, generation, force).catch((error) => {
-          console.error("Mermaid 预览队列失败:", error);
-        });
-
-      if (force) {
-        mermaidRunChain = runMermaid();
-      } else {
-        mermaidRunChain = mermaidRunChain.then(runMermaid).catch((error) => {
-          console.error("Mermaid 预览队列失败:", error);
-        });
-      }
-      await mermaidRunChain;
-
-      if (generation !== previewRenderGeneration) return;
-    } finally {
-      scrollSyncSuspended = false;
-      setPreviewLoading(false);
-    }
-
-    if (useEditorScrollSync) {
-      markScrollSyncSource("editor");
-      setScrollByRatio(preview, syncRatio ?? getScrollRatio(editor));
-    } else if (previewScrollRatio !== null) {
-      setScrollByRatio(preview, previewScrollRatio);
-    }
-
-    if (sidebarTab === "toc") {
-      renderTocListIfNeeded();
-    } else {
-      scheduleTocHighlightUpdate();
-    }
-
-    updateStatus();
+  pendingPreviewScroll = {
+    syncRatio,
+    previewScrollRatio,
+    useEditorScrollSync,
   };
+  scrollSyncSuspended = true;
 
-  if (immediate) {
-    if (previewTimer) clearTimeout(previewTimer);
-    previewTimer = null;
-    void run();
-    return;
+  if (force) {
+    clearKatexCache();
   }
 
-  if (previewTimer) clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => void run(), 100);
+  previewRenderer.schedule(editor.value, editor, {
+    immediate,
+    force,
+    resetScroll,
+  });
 }
 
 function renderPreviewForDocumentOpen() {
@@ -689,6 +512,16 @@ function renderPreviewForDocumentOpen() {
 function updatePreview() {
   if (currentViewMode === "edit") return;
   renderPreview(false);
+}
+
+function initPreviewRenderer() {
+  previewRenderer = new PreviewRenderer({
+    preview,
+    getResourceBaseDir: () =>
+      getResourceBaseDirFromFilePath(currentFilePath),
+    getIsDark: () => isDark,
+    onAfterRender: handlePreviewAfterRender,
+  });
 }
 
 // ── Status bar ─────────────────────────────────────────
@@ -1395,7 +1228,7 @@ function applyTheme(theme: "light" | "dark", options?: { updatePreview?: boolean
     $("#btn-theme").title = t("toolbar.themeLight");
   }
   if (options?.updatePreview !== false) {
-    renderPreview(true);
+    previewRenderer?.onThemeChange();
   }
 }
 
@@ -2428,6 +2261,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   try {
     appSettings = await loadAppSettings();
     documentHistory = await loadDocumentHistory();
+    initPreviewRenderer();
     await applyAppSettings(appSettings, { startup: true });
 
     initSplitter();
