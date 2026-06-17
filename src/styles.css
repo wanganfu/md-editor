@@ -466,6 +466,39 @@ html:not([data-sidebar="open"]) #sidebar {
   }
 }
 
+#preview-pane {
+  position: relative;
+}
+
+.preview-loading {
+  position: absolute;
+  inset: 0;
+  top: 2rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg-preview) 72%, transparent);
+}
+
+.preview-loading.hidden {
+  display: none;
+}
+
+.preview-loading-spinner {
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 3px solid var(--border-primary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: upload-spin 0.8s linear infinite;
+}
+
+#editor-pane {
+  position: relative;
+}
+
 /* ── Markdown Preview ────────────────────────────────── */
 #preview-pane {
   min-width: 0;
@@ -953,4 +986,74 @@ body.lightbox-open #toolbar-wrap {
 
 .settings-attachment-fields.hidden {
   display: none;
+}
+
+.settings-about-card {
+  max-width: 28rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+  background: var(--bg-toolbar);
+}
+
+.settings-about-brand {
+  margin-bottom: 0.75rem;
+}
+
+.settings-about-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-about-version {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.settings-about-description {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.settings-about-meta {
+  margin: 0 0 1rem;
+}
+
+.settings-about-meta-row {
+  display: grid;
+  grid-template-columns: 5rem 1fr;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+}
+
+.settings-about-meta dt {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-about-meta dd {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.settings-about-link {
+  color: var(--accent, #3b82f6);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.settings-about-link:hover {
+  text-decoration: underline;
+}
+
+.settings-about-copyright {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary, var(--text-secondary));
 }

@@ -63,6 +63,7 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.nav.general": "常规",
     "settings.nav.appearance": "外观",
     "settings.nav.plugins": "插件",
+    "settings.nav.about": "关于",
     "settings.nav.system": "系统",
     "settings.defaultViewMode": "默认打开查看方式",
     "settings.defaultViewMode.desc": "新建或启动时默认使用的编辑区布局。",
@@ -104,6 +105,10 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.plugins.empty":
       "未在 plugins 目录发现上传插件。请将插件放入应用 plugins 目录后重新打开设置。",
     "settings.plugins.config": "插件配置",
+    "settings.about.version": "版本 {version}",
+    "settings.about.description":
+      "基于 Tauri 的 Markdown 编辑器，支持实时预览、文件夹浏览与分屏编辑。",
+    "settings.about.repository": "代码仓库",
     "toast.pluginUploadNoPlugin": "请先在设置中选择一个上传插件",
     "upload.inProgress": "正在上传 {name}...",
     "upload.inProgressGeneric": "正在上传...",
@@ -182,6 +187,7 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.nav.general": "General",
     "settings.nav.appearance": "Appearance",
     "settings.nav.plugins": "Plugins",
+    "settings.nav.about": "About",
     "settings.nav.system": "System",
     "settings.defaultViewMode": "Default view mode",
     "settings.defaultViewMode.desc": "Layout used when the app starts or a new session begins.",
@@ -224,6 +230,10 @@ const messages: Record<Language, Record<string, string>> = {
     "settings.plugins.empty":
       "No upload plugins found in the plugins directory. Add plugins and reopen settings.",
     "settings.plugins.config": "Plugin configuration",
+    "settings.about.version": "Version {version}",
+    "settings.about.description":
+      "A Tauri-based Markdown editor with live preview, folder browsing, and split view.",
+    "settings.about.repository": "Repository",
     "toast.pluginUploadNoPlugin": "Select an upload plugin in Settings first",
     "upload.inProgress": "Uploading {name}...",
     "upload.inProgressGeneric": "Uploading...",

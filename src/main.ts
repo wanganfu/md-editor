@@ -43,6 +43,14 @@ import {
   refreshPreviewInteractionLabels,
 } from "./previewInteractions";
 import { initBlockBrowserShortcuts } from "./blockBrowserShortcuts";
+import { initEditorAutocomplete } from "./editorAutocomplete";
+import {
+  APP_COPYRIGHT,
+  APP_NAME,
+  APP_REPOSITORY_URL,
+  APP_VERSION,
+} from "./appInfo";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 initBlockBrowserShortcuts();
 
@@ -67,6 +75,7 @@ const $ = <T extends HTMLElement>(sel: string) =>
   document.querySelector(sel) as T;
 const editor = $<HTMLTextAreaElement>("#editor");
 const preview = $<HTMLDivElement>("#preview");
+const previewLoading = $<HTMLDivElement>("#preview-loading");
 const statusWords = $<HTMLSpanElement>("#status-words");
 const statusChars = $<HTMLSpanElement>("#status-chars");
 const statusLines = $<HTMLSpanElement>("#status-lines");
@@ -576,25 +585,36 @@ async function renderMermaidInPreview(
   }
 }
 
+function setPreviewLoading(loading: boolean) {
+  previewLoading?.classList.toggle("hidden", !loading);
+  if (preview) {
+    preview.setAttribute("aria-busy", loading ? "true" : "false");
+  }
+}
+
 function parsePreviewHtml(markdown: string): string {
   previewMermaidBlockIndex = 0;
   return addHeadingIds(marked.parse(markdown) as string);
 }
 
-function renderPreview(immediate = false, force = false) {
+function renderPreview(
+  immediate = false,
+  force = false,
+  resetScroll = false
+) {
   const run = async () => {
     const generation = ++previewRenderGeneration;
     const syncRatio =
-      scrollSyncLocked && currentViewMode === "split"
+      scrollSyncLocked && currentViewMode === "split" && !resetScroll
         ? getScrollRatio(editor)
         : null;
     const preservePreviewScroll =
-      currentViewMode === "split" && !scrollSyncLocked;
+      currentViewMode === "split" && !scrollSyncLocked && !resetScroll;
     const previewScrollRatio = preservePreviewScroll
       ? getScrollRatio(preview)
       : null;
     const useEditorScrollSync =
-      scrollSyncLocked && currentViewMode === "split";
+      scrollSyncLocked && currentViewMode === "split" && !resetScroll;
 
     scrollSyncSuspended = true;
     try {
@@ -605,6 +625,13 @@ function renderPreview(immediate = false, force = false) {
       } else {
         morphPreviewHtml(preview, html, mermaidThemeKey);
       }
+
+      if (resetScroll) {
+        editor.scrollTop = 0;
+        preview.scrollTop = 0;
+      }
+
+      setPreviewLoading(false);
 
       const runMermaid = () =>
         renderMermaidInPreview(preview, generation, force).catch((error) => {
@@ -623,6 +650,7 @@ function renderPreview(immediate = false, force = false) {
       if (generation !== previewRenderGeneration) return;
     } finally {
       scrollSyncSuspended = false;
+      setPreviewLoading(false);
     }
 
     if (useEditorScrollSync) {
@@ -650,6 +678,12 @@ function renderPreview(immediate = false, force = false) {
 
   if (previewTimer) clearTimeout(previewTimer);
   previewTimer = setTimeout(() => void run(), 100);
+}
+
+function renderPreviewForDocumentOpen() {
+  if (currentViewMode === "edit") return;
+  setPreviewLoading(true);
+  renderPreview(true, true, true);
 }
 
 function updatePreview() {
@@ -1013,16 +1047,16 @@ async function refreshFileList() {
 
 async function openFileByPath(path: string) {
   if (isModified) {
-    if (!confirm("当前文件未保存，是否丢弃更改？")) return;
+    if (!confirm("当前文件未保存，是否丢弃更改？")) return false;
   }
   try {
     const content = await invoke<string>("read_file", { path });
     editor.value = content;
     currentFilePath = path;
     markSaved();
-    updatePreview();
-    await recordDocumentHistory(path);
-    await refreshFileList();
+    captureEditorInsertAnchor();
+    renderPreviewForDocumentOpen();
+    void recordDocumentHistory(path).then(() => refreshFileList());
     return true;
   } catch (e) {
     alert(`打开文件失败: ${e}`);
@@ -1783,7 +1817,7 @@ function initSyncScroll() {
 }
 
 // ── Settings modal ─────────────────────────────────────
-type SettingsPanel = "general" | "plugins" | "appearance" | "system";
+type SettingsPanel = "general" | "plugins" | "appearance" | "about" | "system";
 
 let discoveredPlugins: PluginInfo[] = [];
 
@@ -1791,75 +1825,17 @@ function getWelcomeContent(): string {
   if (getLanguage() === "en") {
     return `# Welcome to MD Editor
 
-A lightweight **Markdown editor** built with Tauri and Tailwind CSS.
+Start writing Markdown, or open a file / folder from the toolbar.
 
-## Features
-
-- 🚀 **Fast & light** — native desktop app with Tauri
-- 📝 **Live preview** — edit and preview in sync
-- 📂 **Folder browser** — open a folder from the toolbar
-- 🎨 **Syntax highlighting** — GFM tables and task lists
-- 🌙 **Dark mode** — toggle with the sun/moon button
-- ⌨️ **Shortcuts** — \`Ctrl+B\` bold, \`Ctrl+S\` save
-
-## Quick start
-
-1. Click **Open file** or **Open folder** in the toolbar
-2. Start writing Markdown
-3. Press \`Ctrl+S\` to save
-
-> Tip: click the ☰ button to expand the sidebar
-
-\`\`\`javascript
-function hello() {
-  console.log("Hello, MD Editor!");
-}
-\`\`\`
-
-| Action | Shortcut |
-|--------|----------|
-| Bold | Ctrl+B |
-| Italic | Ctrl+I |
-| Save | Ctrl+S |
-| Open | Ctrl+O |
-| New | Ctrl+N |
+> \`Ctrl+S\` save · \`Ctrl+O\` open · ⚙ settings
 `;
   }
 
   return `# 欢迎使用 MD Editor
 
-这是一个轻量化的 **Markdown 编辑器**，基于 Tauri + Tailwind CSS 构建。
+在此输入 Markdown，或通过工具栏打开文件 / 文件夹。
 
-## 功能特点
-
-- 🚀 **轻量快速** - Tauri 原生桌面应用
-- 📝 **实时预览** - 编辑与预览同步
-- 📂 **文件夹浏览** - 点击左侧按钮打开文件夹
-- 🎨 **语法高亮** - 支持 GFM 表格、任务列表
-- 🌙 **暗色模式** - 太阳/月亮按钮切换
-- ⌨️ **快捷键** - \`Ctrl+B\` 粗体、\`Ctrl+S\` 保存
-
-## 快速开始
-
-1. 点击工具栏 📂 **打开文件** 或 📁 **打开文件夹**
-2. 开始编辑 Markdown
-3. 使用 \`Ctrl+S\` 保存
-
-> 提示：点击左侧 ☰ 按钮展开侧边栏浏览文件
-
-\`\`\`javascript
-function hello() {
-  console.log("Hello, MD Editor!");
-}
-\`\`\`
-
-| 功能 | 快捷键 |
-|------|--------|
-| 粗体 | Ctrl+B |
-| 斜体 | Ctrl+I |
-| 保存 | Ctrl+S |
-| 打开 | Ctrl+O |
-| 新建 | Ctrl+N |
+> \`Ctrl+S\` 保存 · \`Ctrl+O\` 打开 · ⚙ 设置
 `;
 }
 
@@ -1923,6 +1899,7 @@ async function applyLanguageSetting(language: Language) {
   updateToolbarDocumentTitle();
   updateTitle();
   await updateSettingsDefaultStatus();
+  syncSettingsAboutPanel();
 
   if (!currentFilePath && !isModified) {
     editor.value = getWelcomeContent();
@@ -2224,6 +2201,27 @@ function setSettingsPanel(panel: SettingsPanel) {
   }
 }
 
+function syncSettingsAboutPanel() {
+  const nameEl = $("#settings-about-name");
+  const versionEl = $("#settings-about-version");
+  const descEl = $("#settings-about-description");
+  const repoLink = document.querySelector<HTMLAnchorElement>(
+    "#settings-about-repo-link"
+  );
+  const copyrightEl = $("#settings-about-copyright");
+
+  if (nameEl) nameEl.textContent = APP_NAME;
+  if (versionEl) {
+    versionEl.textContent = t("settings.about.version", { version: APP_VERSION });
+  }
+  if (descEl) descEl.textContent = t("settings.about.description");
+  if (repoLink) {
+    repoLink.href = APP_REPOSITORY_URL;
+    repoLink.textContent = APP_REPOSITORY_URL.replace(/^https?:\/\//, "");
+  }
+  if (copyrightEl) copyrightEl.textContent = APP_COPYRIGHT;
+}
+
 async function updateSettingsDefaultStatus() {
   const status = $("#settings-default-status");
   const btn = $<HTMLButtonElement>("#settings-btn-default-app");
@@ -2251,6 +2249,7 @@ function openSettings() {
   modal.classList.remove("hidden");
   modal.classList.add("open");
   syncSettingsFormFromState();
+  syncSettingsAboutPanel();
   void refreshPluginSettingsUi();
   updateSettingsDefaultStatus();
 }
@@ -2278,6 +2277,15 @@ function initSettings() {
     "click",
     registerDefaultAppFromSettings
   );
+
+  $("#settings-about-repo-link")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      await openUrl(APP_REPOSITORY_URL);
+    } catch {
+      window.open(APP_REPOSITORY_URL, "_blank", "noopener,noreferrer");
+    }
+  });
 
   document.querySelectorAll(".settings-nav-item").forEach((item) => {
     item.addEventListener("click", () => {
@@ -2430,6 +2438,15 @@ window.addEventListener("DOMContentLoaded", async () => {
       preview,
       resolveResourceUrl,
       resolveLocalFilePath,
+    });
+    initEditorAutocomplete({
+      editor,
+      onApplied: () => {
+        captureEditorInsertAnchor();
+        markModified();
+        updateToolbarDocumentTitle();
+        updatePreview();
+      },
     });
     initSettings();
     initToolbarLayout();

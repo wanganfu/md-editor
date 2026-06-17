@@ -143,9 +143,12 @@
           <div class="absolute inset-y-0 -left-1 -right-1 z-10 group-hover:bg-blue-500/20 transition-colors"></div>
         </div>
 
-        <section id="preview-pane" class="flex-1 flex flex-col">
+        <section id="preview-pane" class="flex-1 flex flex-col relative">
           <div class="flex items-center justify-between px-3 py-1 border-b shrink-0" style="background:var(--bg-pane-header);border-color:var(--border-primary)">
             <span class="text-xs uppercase tracking-wider" style="color:var(--text-secondary)" data-i18n="pane.preview">Preview</span>
+          </div>
+          <div id="preview-loading" class="preview-loading hidden" aria-live="polite" aria-busy="true">
+            <div class="preview-loading-spinner" aria-hidden="true"></div>
           </div>
           <div id="preview" class="flex-1 overflow-y-auto p-6 md-preview" style="background:var(--bg-preview)"></div>
         </section>
@@ -188,6 +191,10 @@
             <button type="button" class="settings-nav-item" data-settings-panel="appearance">
               <i class="fa-solid fa-palette"></i>
               <span data-i18n="settings.nav.appearance">外观</span>
+            </button>
+            <button type="button" class="settings-nav-item" data-settings-panel="about">
+              <i class="fa-solid fa-circle-info"></i>
+              <span data-i18n="settings.nav.about">关于</span>
             </button>
             <button type="button" class="settings-nav-item" data-settings-panel="system">
               <i class="fa-solid fa-desktop"></i>
@@ -303,6 +310,24 @@
                     <span data-i18n="settings.themeDark">黑色</span>
                   </label>
                 </div>
+              </div>
+            </section>
+            <section id="settings-panel-about" class="settings-panel hidden">
+              <div class="settings-about-card">
+                <div class="settings-about-brand">
+                  <div id="settings-about-name" class="settings-about-name">MD Editor</div>
+                  <div id="settings-about-version" class="settings-about-version"></div>
+                </div>
+                <p id="settings-about-description" class="settings-about-description"></p>
+                <dl class="settings-about-meta">
+                  <div class="settings-about-meta-row">
+                    <dt data-i18n="settings.about.repository">代码仓库</dt>
+                    <dd>
+                      <a id="settings-about-repo-link" class="settings-about-link" href="https://github.com/wanganfu/md-editor" target="_blank" rel="noopener noreferrer"></a>
+                    </dd>
+                  </div>
+                </dl>
+                <p id="settings-about-copyright" class="settings-about-copyright"></p>
               </div>
             </section>
             <section id="settings-panel-system" class="settings-panel hidden">
